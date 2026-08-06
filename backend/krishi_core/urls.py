@@ -13,6 +13,7 @@ router.register(r'alerts', views.AlertViewSet)
 router.register(r'expenses', views.ExpenseViewSet)
 router.register(r'notifications', views.NotificationViewSet)
 router.register(r'chat/messages', views.ChatMessageViewSet)
+router.register(r'market/prices', views.MarketPriceViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -24,20 +25,32 @@ urlpatterns = [
     path('auth/profile', views.auth_update_profile, name='auth_update_profile'),
     path('auth/forgot-password', views.auth_forgot_password, name='auth_forgot_password'),
 
-    # Market endpoints
-    path('market/prices', views.MarketPriceViewSet.as_view({'get': 'list'}), name='market_prices'),
-    path('market/history', views.MarketPriceViewSet.as_view({'get': 'list'}), name='market_history'),
-    path('market/locations', views.market_locations, name='market_locations'),
+    # Mocks
+    path('auth/google', views.auth_google, name='auth_google'),
+    path('soil-reports', views.soil_reports, name='soil_reports'),
+    
+    # Weather cache
+    path('weather/cache/<str:key>', views.weather_cache_get, name='weather_cache_get'),
+    path('weather/cache', views.weather_cache_set, name='weather_cache_set'),
     
     # Chat AI endpoints
-    path('chat', views.chat_stream, name='chat_stream'),
+    path('chat/sessions', views.chat_sessions, name='chat_sessions'),
     path('chat/sync-plan', views.chat_sync_plan, name='chat_sync_plan'),
+    path('chat', views.chat_stream, name='chat_stream'),
+    path('chat/<str:sid>', views.chat_history, name='chat_history'),
+    
+    # Market endpoints
+    path('market/locations', views.market_locations, name='market_locations'),
+    
+    # Adaptive Crop Planning endpoints
+    path('daily-tasks', views.daily_tasks, name='daily_tasks'),
+    path('task-complete', views.task_complete, name='task_complete'),
     
     # ML & Weather endpoints
     path("retrieve", views_ml.RetrieveView.as_view()),
     path("soil_recommend", views_ml.SoilRecommendView.as_view()),
     path("crop_stage_tips", views_ml.CropStageTipsView.as_view()),
-    path("predict_disease", views_ml.PredictDiseaseView.as_view()),
+    path("disease/predict", views_ml.PredictDiseaseView.as_view()),
     path("health", views_ml.HealthView.as_view()),
     path("weather", views_ml.WeatherView.as_view()),
 ]

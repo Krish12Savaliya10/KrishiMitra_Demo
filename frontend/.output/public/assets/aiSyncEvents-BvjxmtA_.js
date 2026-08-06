@@ -1,0 +1,1 @@
+var e=`krishmitra:ai-sync`;function t(t=`ai`){typeof window>`u`||window.dispatchEvent(new CustomEvent(e,{detail:{reason:t}}))}function n(t){if(typeof window>`u`)return()=>{};let n=e=>t?.(e?.detail?.reason);return window.addEventListener(e,n),()=>window.removeEventListener(e,n)}export{n,t};

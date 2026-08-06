@@ -159,7 +159,7 @@ function RecommendationsPage() {
         startPreparationDate: form.startPreparationDate,
       };
 
-      const res = await fetch(`${ML_URL}/api/soil_recommend`, {
+      const res = await fetch(`${API_URL}/soil_recommend`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -169,7 +169,7 @@ function RecommendationsPage() {
       setResults(data.recommendations || []);
       toast.success("Analysis complete — view your recommendations below");
     } catch (err) {
-      toast.error("Could not reach ML server. Make sure python app.py is running on port 5005.");
+      toast.error("Could not reach backend server. Make sure it is running on port 5001.");
     } finally {
       setIsLoading(false);
     }

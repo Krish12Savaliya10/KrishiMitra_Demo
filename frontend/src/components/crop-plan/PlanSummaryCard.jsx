@@ -1,0 +1,37 @@
+import React from 'react';
+import { ClipboardList } from 'lucide-react';
+
+export function PlanSummaryCard({ activePlan, durationDays, harvestDate }) {
+  if (!activePlan) return null;
+
+  const data = [
+    { label: "Crop", value: activePlan.cropName || "Not Available" },
+    { label: "Variety", value: activePlan.variety || "Not Available" },
+    { label: "Farm Name", value: activePlan.farmName || "Not Available" },
+    { label: "Area", value: activePlan.areaAcres ? `${activePlan.areaAcres} acres` : "Not Available" },
+    { label: "Season", value: activePlan.season || "Not Available" },
+    { label: "Seed Rate", value: activePlan.seedRateKgPerAcre ? `${activePlan.seedRateKgPerAcre} kg/acre` : "Not Available" },
+    { label: "Expected Yield", value: activePlan.targetYieldKg ? `${activePlan.targetYieldKg} kg` : "Not Available" },
+    { label: "Estimated Cost", value: activePlan.estimatedCost ? `₹${activePlan.estimatedCost.toLocaleString("en-IN")}` : "Not Available" },
+    { label: "Expected Revenue", value: activePlan.expectedRevenue ? `₹${activePlan.expectedRevenue.toLocaleString("en-IN")}` : "Not Available" },
+    { label: "Harvest Date", value: harvestDate || "Not Available" },
+    { label: "Crop Duration", value: durationDays ? `${durationDays} days` : "Not Available" },
+  ];
+
+  return (
+    <div className="glass rounded-2xl p-5 shadow-sm h-full flex flex-col">
+      <div className="flex items-center gap-2 mb-4">
+        <ClipboardList className="w-4 h-4 text-primary" />
+        <h3 className="text-sm font-semibold text-foreground">Plan Summary</h3>
+      </div>
+      <dl className="space-y-3 flex-1 overflow-y-auto pr-2 scrollbar-thin">
+        {data.map((item, idx) => (
+          <div key={idx} className="flex justify-between items-center text-xs border-b border-border/50 pb-2 last:border-0 last:pb-0">
+            <dt className="text-muted-foreground">{item.label}</dt>
+            <dd className="font-semibold text-foreground text-right">{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}

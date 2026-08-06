@@ -5,7 +5,13 @@ from .models import (
     WeatherCache, ChatMessage
 )
 
-class UserSerializer(serializers.ModelSerializer):
+
+class BaseModelSerializer(serializers.ModelSerializer):
+    _id = serializers.SerializerMethodField()
+    def get__id(self, obj):
+        return str(obj.id)
+
+class UserSerializer(BaseModelSerializer):
     firstName = serializers.CharField(source='first_name')
     lastName = serializers.CharField(source='last_name', allow_blank=True, default='')
     # Expose `_id` as string so frontend code that checks `user._id` still works
@@ -22,59 +28,67 @@ class UserSerializer(serializers.ModelSerializer):
             'isVerified', 'settings', 'date_joined'
         ]
 
-class FarmSerializer(serializers.ModelSerializer):
+class FarmSerializer(BaseModelSerializer):
     class Meta:
         model = Farm
         fields = '__all__'
         read_only_fields = ['owner']
 
-class CropPlanSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CropPlan
-        fields = '__all__'
-        read_only_fields = ['owner']
-
-class MarketPriceSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MarketPrice
-        fields = '__all__'
-
-class ScheduleTaskSerializer(serializers.ModelSerializer):
+class ScheduleTaskSerializer(BaseModelSerializer):
     class Meta:
         model = ScheduleTask
         fields = '__all__'
         read_only_fields = ['owner']
 
-class RecommendationSerializer(serializers.ModelSerializer):
+class CropPlanSerializer(BaseModelSerializer):
+    tasks = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CropPlan
+        fields = '__all__'
+        read_only_fields = ['owner']
+
+    def get_tasks(self, obj):
+        tasks = obj.schedule_tasks.all()
+        return ScheduleTaskSerializer(tasks, many=True).data
+
+class MarketPriceSerializer(BaseModelSerializer):
+    class Meta:
+        model = MarketPrice
+        fields = '__all__'
+
+
+
+class RecommendationSerializer(BaseModelSerializer):
     class Meta:
         model = Recommendation
         fields = '__all__'
         read_only_fields = ['owner']
 
-class AlertSerializer(serializers.ModelSerializer):
+class AlertSerializer(BaseModelSerializer):
     class Meta:
         model = Alert
         fields = '__all__'
         read_only_fields = ['owner']
 
-class ExpenseSerializer(serializers.ModelSerializer):
+class ExpenseSerializer(BaseModelSerializer):
     class Meta:
         model = Expense
         fields = '__all__'
         read_only_fields = ['owner']
 
-class NotificationSerializer(serializers.ModelSerializer):
+class NotificationSerializer(BaseModelSerializer):
     class Meta:
         model = Notification
         fields = '__all__'
         read_only_fields = ['owner']
 
-class WeatherCacheSerializer(serializers.ModelSerializer):
+class WeatherCacheSerializer(BaseModelSerializer):
     class Meta:
         model = WeatherCache
         fields = '__all__'
 
-class ChatMessageSerializer(serializers.ModelSerializer):
+class ChatMessageSerializer(BaseModelSerializer):
     class Meta:
         model = ChatMessage
         fields = '__all__'

@@ -8,6 +8,15 @@ import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { subscribeAiSyncRefresh } from "@/lib/aiSyncEvents";
 
+import { CurrentStageCard } from "@/components/crop-plan/CurrentStageCard";
+import { PlanSummaryCard } from "@/components/crop-plan/PlanSummaryCard";
+import { AiFarmAdvisor } from "@/components/crop-plan/AiFarmAdvisor";
+import { WeatherCard } from "@/components/crop-plan/WeatherCard";
+import { SoilHealthCard } from "@/components/crop-plan/SoilHealthCard";
+import { ProgressMetrics } from "@/components/crop-plan/ProgressMetrics";
+import { VerticalTimeline } from "@/components/crop-plan/VerticalTimeline";
+import { NextTaskCard } from "@/components/crop-plan/NextTaskCard";
+
 const API_URL = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api");
 
 export const Route = createFileRoute("/_app/crop-plan")({
@@ -311,18 +320,12 @@ function CropPlanPage() {
   };
 
   useEffect(() => {
-    if (!activePlan?._id || !token) {
+    if (activePlan?.tasks) {
+      setPlanTasks(Array.isArray(activePlan.tasks) ? activePlan.tasks : []);
+    } else {
       setPlanTasks([]);
-      return;
     }
-
-    fetch(`${API_URL}/crop-plans/${activePlan._id}/calendar`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.ok ? res.json() : null)
-      .then((data) => setPlanTasks(Array.isArray(data?.tasks) ? data.tasks : []))
-      .catch(() => setPlanTasks([]));
-  }, [activePlan?._id, token]);
+  }, [activePlan]);
 
   useEffect(() => {
     const unsubscribe = subscribeAiSyncRefresh(() => {
@@ -343,8 +346,8 @@ function CropPlanPage() {
     // full timestamp was why "current stage" sometimes failed to show at all).
     const toDayStart = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
     const today = toDayStart(new Date());
-    const fmt = (date) => date.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
-    const dayDiff = (a, b) => Math.max(0, Math.round((toDayStart(b) - toDayStart(a)) / oneDay));
+    const fmt = (date) => !isNaN(date) ? date.toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : "—";
+    const dayDiff = (a, b) => Math.max(0, Math.round((toDayStart(b) - toDayStart(a)) / oneDay)) || 0;
 
     return sortedMilestones.map((m, i) => {
       const start = toDayStart(m.plannedDate);
@@ -381,9 +384,11 @@ function CropPlanPage() {
     });
   }, [activePlan, planTasks]);
   const cropName = activePlan ? `${activePlan.cropName}${activePlan.variety ? ` (${activePlan.variety})` : ""}` : "No active plan";
-  const sowingDate = activePlan?.sowingDate ? new Date(activePlan.sowingDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
-  const harvestDate = activePlan?.expectedHarvestDate ? new Date(activePlan.expectedHarvestDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
-  const durationDays = activePlan?.sowingDate && activePlan?.expectedHarvestDate
+  const sowingDateObj = activePlan?.sowingDate ? new Date(activePlan.sowingDate) : null;
+  const harvestDateObj = activePlan?.expectedHarvestDate ? new Date(activePlan.expectedHarvestDate) : null;
+  const sowingDate = sowingDateObj && !isNaN(sowingDateObj) ? sowingDateObj.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
+  const harvestDate = harvestDateObj && !isNaN(harvestDateObj) ? harvestDateObj.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
+  const durationDays = sowingDateObj && harvestDateObj && !isNaN(sowingDateObj) && !isNaN(harvestDateObj)
     ? Math.max(1, Math.round((new Date(activePlan.expectedHarvestDate) - new Date(activePlan.sowingDate)) / (24 * 60 * 60 * 1000)))
     : 0;
 
@@ -395,7 +400,7 @@ function CropPlanPage() {
     if (!_activeStageForRag) return;
     setStageTips(null);
     setStageTipsLoading(true);
-    fetch(`${ML_URL}/api/crop_stage_tips`, {
+    fetch(`${API_URL}/crop_stage_tips`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ crop: _activeCropName, stage: _activeStageForRag }),
@@ -704,277 +709,57 @@ function CropPlanPage() {
         </div>
       )}
 
-      {/* Summary band — only shown when a real plan exists */}
-      {activePlan && <section className="glass mb-6 grid gap-5 rounded-2xl p-6 sm:grid-cols-4">
-        {[
-          [<Sprout key="i" className="h-4 w-4 text-primary" />, "Current stage", activeStage?.stage || "—"],
-          [<CalendarRange key="i" className="h-4 w-4 text-cyan" />, "Est. duration", `${durationDays} days`],
-          [<CheckCircle2 key="i" className="h-4 w-4 text-primary" />, "Stages complete", `${done} of ${cropStages.length}`],
-          [<Flag key="i" className="h-4 w-4 text-warning" />, "Harvest target", harvestDate],
-        ].map(([icon, l, v]) => (
-          <div key={l} className="flex items-center gap-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-secondary/60 ring-1 ring-border">
-              {icon}
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{l}</div>
-              <div className="truncate text-sm font-semibold">{v}</div>
-            </div>
-          </div>
-        ))}
-      </section>}
-
-
-      {/* Progress bar — only when a real plan exists */}
-      {activePlan && <div className="glass mb-6 rounded-2xl p-5">
-        <div className="flex items-center justify-between text-xs mb-1">
-          <span className="font-semibold">Season progress</span>
-          <span className="font-display font-bold text-primary">{seasonProgress}%</span>
-        </div>
-        <div className="shimmer-line mt-2 h-2.5 overflow-hidden rounded-full bg-secondary">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-primary via-primary/60 to-cyan transition-all duration-700"
-            style={{ width: `${seasonProgress}%` }}
+      {/* Smart Dashboard Layout */}
+      {activePlan && (
+        <div className="space-y-6 mb-6">
+          
+          <ProgressMetrics 
+            tasksDone={planTasks.filter(t => t.status === "done").length}
+            todayTasks={planTasks.filter(t => new Date(t.date).toDateString() === new Date().toDateString()).length}
+            upcomingTasks={planTasks.filter(t => t.status !== "done" && new Date(t.date) > new Date()).length}
+            seasonProgress={seasonProgress}
           />
-        </div>
-        <div className="mt-1.5 flex justify-between text-[10px] text-muted-foreground">
-          <span>Sowing · {sowingDate}</span>
-          <span className="text-primary font-medium">Day {currentDay} of {durationDays}</span>
-          <span>Harvest · {harvestDate}</span>
-        </div>
-        {activeStage && (
-          <div className="mt-3 flex items-center gap-3">
-            <div className="flex-1">
-              <div className="flex justify-between text-[10px] mb-1">
-                <span className="text-muted-foreground">Current stage: <span className="text-foreground font-medium">{activeStage.stage}</span></span>
-                <span className="text-primary font-semibold">{stageProgress}%</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-secondary/80">
-                <div
-                  className="h-full rounded-full bg-primary/60 transition-all duration-700"
-                  style={{ width: `${stageProgress}%` }}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            <CurrentStageCard 
+              activeStage={activeStage} 
+              currentDay={currentDay} 
+              durationDays={durationDays} 
+              stageProgress={stageProgress} 
+              harvestDate={harvestDate} 
+            />
+            <NextTaskCard planTasks={planTasks} />
+            <AiFarmAdvisor cropName={activePlan.cropName} />
+            <WeatherCard />
+          </div>
+          
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+            <div className="xl:col-span-3">
+              <div className="glass rounded-2xl p-6 shadow-sm">
+                <h2 className="mb-6 font-display text-lg font-bold text-foreground">
+                  Growth Stage Roadmap
+                </h2>
+                <VerticalTimeline 
+                  cropStages={cropStages} 
+                  stageTips={stageTips} 
+                  stageTipsLoading={stageTipsLoading} 
+                  stageProgress={stageProgress} 
+                  getStageActivities={getStageActivities} 
                 />
               </div>
             </div>
-          </div>
-        )}
-      </div>}
-
-      {activePlan && (
-        <section className="glass mb-6 rounded-2xl p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="font-display text-sm font-semibold">Plan overview</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Stage timeline, key activities, and task distribution for your {activePlan.cropName} crop plan.
-              </p>
-            </div>
-            <div className="rounded-xl bg-secondary/50 px-3 py-2 text-xs font-semibold text-muted-foreground">
-              {planTasks.length} scheduled tasks
+            
+            <div className="xl:col-span-1 flex flex-col gap-6">
+              <PlanSummaryCard 
+                activePlan={activePlan} 
+                durationDays={durationDays} 
+                harvestDate={harvestDate} 
+              />
+              <SoilHealthCard />
             </div>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {cropStages.map((stage) => {
-              const activities = getStageActivities(stage.stage, stage.majorTasks);
-              const statusColour =
-                stage.status === "done" ? "border-primary/30 bg-primary/5" :
-                stage.status === "active" ? "border-primary/50 bg-primary/8" :
-                "border-border bg-background/40";
-              return (
-                <div key={`overview-${stage._id}`} className={`rounded-xl border p-3 transition-colors ${statusColour}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-xs font-semibold text-foreground">{stage.stage}</p>
-                    <div className="flex items-center gap-1">
-                      {stage.status === "done" && <span className="text-[9px] font-bold text-primary">✓ Done</span>}
-                      {stage.status === "active" && <span className="text-[9px] font-bold text-primary animate-pulse">● Active</span>}
-                      <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[9px] font-bold uppercase text-muted-foreground">
-                        {stage.durationDays}d
-                      </span>
-                    </div>
-                  </div>
-                  <p className="mt-1 text-[10px] text-muted-foreground">{stage.window}</p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {activities.map((act) => (
-                      <span key={act} className="rounded-md bg-secondary/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">{act}</span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        </div>
       )}
-
-      <div className="grid gap-5 lg:grid-cols-3">
-        {/* Timeline */}
-        <section className="lg:col-span-2">
-          <h2 className="mb-3 font-display text-sm font-semibold text-muted-foreground">
-            Growth stage roadmap
-          </h2>
-          <div className="relative space-y-3 pl-6">
-            <span className="absolute bottom-4 left-[9px] top-4 w-px bg-gradient-to-b from-primary via-border to-border" />
-            {cropStages.map((s, i) => (
-              <div key={s._id || i} className="relative">
-                <span
-                  className={`absolute -left-6 top-5 grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold ${
-                    s.status === "done"
-                      ? "bg-primary text-primary-foreground"
-                      : s.status === "active"
-                        ? "bg-primary/15 text-primary ring-2 ring-primary pulse-dot"
-                        : "bg-secondary ring-1 ring-border"
-                  }`}
-                >
-                  {s.status === "done" ? "✓" : ""}
-                </span>
-                <div
-                  className={`glass rounded-2xl p-4 ${s.status === "active" ? "border-primary/35 glow-emerald" : ""} ${
-                    s.status === "upcoming" ? "opacity-70" : ""
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3
-                      className={`font-display text-sm font-semibold ${s.status === "active" ? "text-primary" : ""}`}
-                    >
-                      {s.stage}
-                    </h3>
-                    <span className="text-[11px] text-muted-foreground">{s.window}</span>
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-3 text-[11px] text-muted-foreground">
-                    <span>{s.durationDays || "—"} days</span>
-                    <span>{s.tasks > 0 ? `${s.tasksDone}/${s.tasks} tasks done` : "0 tasks"}</span>
-                    <span>{s.gapDays === 0 ? "Starts plan" : `Day ${s.gapDays}+`}</span>
-                    {s.status === "active" && (
-                      <span className="font-semibold text-primary">{stageProgress}% through stage</span>
-                    )}
-                    {s.status === "done" && <span className="text-primary/70">Completed ✓</span>}
-                  </div>
-                  {/* Major activities for this stage */}
-                  <div className="mt-3 grid gap-1.5 text-[11px] sm:grid-cols-2">
-                    {getStageActivities(s.stage, s.majorTasks).map((act) => (
-                      <div key={`${s._id}-${act}`} className="rounded-lg bg-secondary/40 px-3 py-1.5 text-muted-foreground">
-                        • {act}
-                      </div>
-                    ))}
-                  </div>
-                  {s.status === "active" && (
-                    <div className="mt-3 space-y-3">
-                      {/* Key tasks */}
-                      {stageTipsLoading && (
-                        <div className="text-[11px] text-muted-foreground animate-pulse">Loading field tips…</div>
-                      )}
-                      {!stageTipsLoading && stageTips?.key_tasks?.length > 0 && (
-                        <div className="grid gap-2 text-[11px] sm:grid-cols-2">
-                          {stageTips.key_tasks.map((t) => (
-                            <div key={t} className="rounded-lg bg-secondary/40 px-3 py-1.5 text-muted-foreground">
-                              • {t}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {/* Irrigation + Fertilizer strip */}
-                      {!stageTipsLoading && stageTips && (
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {stageTips.irrigation && (
-                            <div className="flex items-start gap-2 rounded-xl border border-border/60 bg-secondary/20 px-3 py-2">
-                              <Droplets className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan" />
-                              <div>
-                                <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Irrigation</div>
-                                <div className="text-[11px] text-foreground">{stageTips.irrigation}</div>
-                              </div>
-                            </div>
-                          )}
-                          {stageTips.fertilizer && (
-                            <div className="flex items-start gap-2 rounded-xl border border-border/60 bg-secondary/20 px-3 py-2">
-                              <FlaskConical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-                              <div>
-                                <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">Fertilizer</div>
-                                <div className="text-[11px] text-foreground">{stageTips.fertilizer}</div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {/* Watch for */}
-                      {!stageTipsLoading && stageTips?.watch_for && (
-                        <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2">
-                          <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-                          <div>
-                            <div className="text-[9px] font-bold uppercase tracking-widest text-destructive/70">Watch for</div>
-                            <div className="text-[11px] text-foreground">{stageTips.watch_for}</div>
-                          </div>
-                        </div>
-                      )}
-                      {/* Why it matters */}
-                      {!stageTipsLoading && stageTips?.why_it_matters && (
-                        <p className="text-[11px] italic text-muted-foreground">
-                          💡 {stageTips.why_it_matters}
-                        </p>
-                      )}
-                      {/* Critical badge */}
-                      {!stageTipsLoading && stageTips?.critical && (
-                        <div className="flex items-center gap-1.5">
-                          <AlertTriangle className="h-3 w-3 text-destructive" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-destructive">Critical stage — do not skip</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Milestones + Summary */}
-        <section>
-          <h2 className="mb-3 font-display text-sm font-semibold text-muted-foreground">
-            Key milestones
-          </h2>
-          <div className="glass rounded-2xl p-5">
-            <div className="space-y-3.5">
-              {planMilestones.map((m) => (
-                <div key={m.label} className="flex items-center gap-3">
-                  <span
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[10px] font-bold ${
-                      m.tone === "primary"
-                        ? "bg-primary/12 text-primary ring-1 ring-primary/25"
-                        : m.tone === "cyan"
-                          ? "bg-cyan/12 text-cyan ring-1 ring-cyan/25"
-                          : "bg-warning/12 text-warning ring-1 ring-warning/25"
-                    }`}
-                  >
-                    {m.date.split(" ")[1] || m.date}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="truncate text-xs font-medium">{m.label}</div>
-                    <div className="text-[10px] text-muted-foreground">{m.date}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="glass mt-4 rounded-2xl p-5">
-            <h3 className="text-xs font-semibold">Plan summary</h3>
-            <dl className="mt-3 space-y-2 text-[11px]">
-              {[
-                ["Crop", activePlan?.cropName || "—"],
-                ["Variety", activePlan?.variety || "—"],
-                ["Area", activePlan?.areaAcres ? `${activePlan.areaAcres} acres` : "—"],
-                ["Seed rate", activePlan?.seedRateKgPerAcre ? `${activePlan.seedRateKgPerAcre} kg/acre` : "—"],
-                ["Estimated cost", activePlan?.estimatedCost ? `₹${activePlan.estimatedCost.toLocaleString("en-IN")}` : "—"],
-                ["Target yield", activePlan?.targetYieldKg ? `${activePlan.targetYieldKg} kg/acre` : "—"],
-              ].map(([k, v]) => (
-                <div key={k} className="flex justify-between border-b border-border/60 pb-2 last:border-0">
-                  <dt className="text-muted-foreground">{k}</dt>
-                  <dd className="font-semibold">{v}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </section>
-      </div>
-
     </div>
   );
 }

@@ -94,6 +94,11 @@ export function AppDataProvider({ children }) {
           name: `${meData.user.firstName} ${meData.user.lastName || ""}`.trim(),
           role: meData.user.role,
         });
+        if (meData.user.location && typeof meData.user.location === "string") {
+          setUserLocation({ address: meData.user.location, source: "profile" });
+        } else if (meData.user.location && meData.user.location.address) {
+          setUserLocation(meData.user.location);
+        }
       }
 
       // 2. Fetch ALL farms — no more grabbing just farms[0]

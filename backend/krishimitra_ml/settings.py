@@ -85,5 +85,5 @@ USE_TZ = True
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", str(BASE_DIR.parent / "knowledge-base" / "chroma_db"))
+CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", str(BASE_DIR / "knowledge-base" / "chroma_db"))
 DISABLE_TENSORFLOW_IMPORT = os.getenv("DISABLE_TENSORFLOW_IMPORT", "0") == "1"

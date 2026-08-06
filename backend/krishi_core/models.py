@@ -72,6 +72,7 @@ class CropPlan(models.Model):
     estimatedCost = models.FloatField(default=0)
     targetYieldKg = models.FloatField(default=0)
     seasonProgressPct = models.FloatField(default=0)
+    driftDays = models.IntegerField(default=0)
     status = models.CharField(
         max_length=20,
         choices=[("active", "Active"), ("completed", "Completed"), ("abandoned", "Abandoned")],
@@ -123,6 +124,8 @@ class ScheduleTask(models.Model):
         choices=[("pending", "Pending"), ("done", "Done"), ("delayed", "Delayed"), ("skipped", "Skipped")],
         default="pending"
     )
+    completedDate = models.DateTimeField(null=True, blank=True)
+    reason = models.TextField(blank=True, default="")
     aiGenerated = models.BooleanField(default=True)
     fieldNotes = models.TextField(blank=True, default="")
     dayNumber = models.IntegerField(default=0)

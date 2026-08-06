@@ -6,25 +6,27 @@
 
 ## 🏗️ Architecture Overview
 
+The system features a **Stateful & Adaptive Crop Planning Architecture**:
+
 ```text
     [ Frontend UI ]
-    React + Vite (Tailwind CSS)
-         │    │
-   HTTP  │    │  HTTP / REST
-         │    │
-         ▼    ▼
- [ Backend API Server ] ────────────────┐
- Node.js + Express + Mongoose           │
-         │                              │ HTTP / REST
-         ▼                              ▼
-    [ Database ]                 [ ML Microservice ]
-      MongoDB                      Python Flask
- (Users, Farms, Markets)                │
-                                        ├── YOLOv8 (Object Detection)
-                                        ├── EfficientNet (Disease CNN)
-                                        ├── Random Forest (Crop Rec.)
-                                        └── OpenMeteo API (Weather)
+          │
+          ▼
+  [ Rule Engine (Django) ] ──────┐
+   (Weather Rules, Overdue)      │ 
+          │                      │ 
+          ▼                      ▼
+  [ State Store (DB) ]    [ RAG Explainer ]
+ (Tracks Shift/Drift)     (ChromaDB + LLM)
 ```
+
+### Adaptive Rule Engine
+The daily task generator dynamically modifies crop schedules based on real-world constraints:
+1. **Weather Interruptions:** If a task is `Irrigation` and forecast rain > 15mm, the task is marked as `Skipped`.
+2. **Day-Offset Drift:** If an `Irrigation` or `Fertilizer` task is completed late, or left pending > 3 days, all downstream tasks are automatically shifted by the overdue gap, tracked globally via `driftDays`.
+3. **Pest Escalations:** If the crop is in the `Flowering/Reproductive` stage and humidity is > 80% with rain, `Pest Scouting` tasks are automatically escalated to `Critical` priority.
+
+Whenever a rule adjusts a task, the **RAG Layer** generates a natural-language, farmer-friendly explanation which is cached on the task record.
 
 ---
 

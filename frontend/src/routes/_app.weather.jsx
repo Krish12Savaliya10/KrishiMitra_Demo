@@ -109,8 +109,8 @@ async function fetchWeatherForLocation(locationQuery) {
     cityName = addr.city || addr.town || addr.village || addr.county || locationQuery;
   }
 
-  const baseUrl = import.meta.env.VITE_ML_API_URL || "http://localhost:5005";
-  const weatherRes = await fetch(`${baseUrl}/api/weather?latitude=${lat}&longitude=${lon}`);
+  const baseUrl = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api");
+  const weatherRes = await fetch(`${baseUrl}/weather?latitude=${lat}&longitude=${lon}`);
   
   if (!weatherRes.ok) {
     throw new Error("Failed to fetch weather from ML backend");

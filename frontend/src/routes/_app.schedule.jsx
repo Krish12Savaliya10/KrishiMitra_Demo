@@ -99,7 +99,7 @@ function SchedulePage() {
     const topTask = tasks.find((t) => t.status === "pending" && t.priority === "high")
       || tasks.find((t) => t.status === "pending");
     if (!topTask) return;
-    fetch(`${ML_URL}/api/crop_stage_tips`, {
+    fetch(`${API_URL}/crop_stage_tips`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

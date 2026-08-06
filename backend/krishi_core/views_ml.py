@@ -428,7 +428,7 @@ class WeatherView(APIView):
         except ValueError:
             return Response({"error": "Latitude and longitude must be valid numbers"}, status=400)
 
-        from weather.services.openmeteo_service import OpenMeteoService
+        from krishi_core.services.openmeteo_service import OpenMeteoService
         forecast = OpenMeteoService().get_forecast(latitude=lat, longitude=lon)
         if forecast is None:
             return Response({"error": "Failed to fetch weather data from upstream service"}, status=502)

@@ -4,7 +4,7 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite dev --port 3000 --strictPort",
     "dev:ui": "vite dev",
     "dev:api": "cd backend && node server.js",
     "dev:ml": "cd ml-service && source venv/bin/activate && python3 manage.py runserver 0.0.0.0:5005 --noreload",
