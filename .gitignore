@@ -1,0 +1,60 @@
+# ─── Secrets & Environment ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Node / npm ──────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ─── Frontend Build ───────────────────────────────────────────────────────────
+frontend/dist/
+frontend/.vite/
+frontend/build/
+
+# ─── Python / Django / ML Service ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+ml-service/venv/
+ml-service/__pycache__/
+ml-service/db.sqlite3
+ml-service/*.log
+venv/
+.venv/
+
+# ─── Chroma / Vector DB ───────────────────────────────────────────────────────
+ml-service/chroma_db/
+chroma_db/
+
+# ─── OS & IDE Files ───────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V8
+.Trashes
+Thumbs.db
+desktop.ini
+
+# ─── VSCode ───────────────────────────────────────────────────────────────────
+.vscode/
+*.code-workspace
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+.cache/
+.temp/
+.tmp/
