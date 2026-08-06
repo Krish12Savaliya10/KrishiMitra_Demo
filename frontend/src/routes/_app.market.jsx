@@ -19,7 +19,7 @@ const DEFAULT_CROPS = ["Soybean", "Cotton", "Wheat", "Maize", "Rice", "Pigeonpea
 
 function MarketPage() {
   const navigate = useNavigate();
-  const { token, activeFarm } = useAppData();
+  const { token, activeFarm, userLocation } = useAppData();
   
   // Data states
   const [prices, setPrices] = useState([]); // Latest prices across markets
@@ -32,13 +32,13 @@ function MarketPage() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [needsRefresh, setNeedsRefresh] = useState(false);
 
-  // Filters
+  // Filters — pre-seeded from userLocation stored in context
   const [commoditySearch, setCommoditySearch] = useState("");
-  const [stateFilter, setStateFilter] = useState("Maharashtra");
-  const [districtFilter, setDistrictFilter] = useState("");
+  const [stateFilter, setStateFilter] = useState(() => userLocation?.state || "Maharashtra");
+  const [districtFilter, setDistrictFilter] = useState(() => userLocation?.district || "");
   const [marketFilter, setMarketFilter] = useState("");
   const [sortOrder, setSortOrder] = useState("dateDesc");
-  const [locationLoaded, setLocationLoaded] = useState(false);
+  const [locationLoaded, setLocationLoaded] = useState(Boolean(userLocation?.state));
   
   // Dependent dropdown data
   const [availableDistricts, setAvailableDistricts] = useState([]);
@@ -47,26 +47,32 @@ function MarketPage() {
   const [cropSearchQuery, setCropSearchQuery] = useState("");
 
   // Attempt to auto-detect user's state and district from activeFarm
+  // Sync filters whenever userLocation in context changes (e.g. user just saved/updated a farm)
   useEffect(() => {
-    async function detectLocation() {
-      if (!activeFarm?.location?.address || locationLoaded) return;
-      try {
-        const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(activeFarm.location.address)}&addressdetails=1`);
-        const geoData = await geoRes.json();
-        if (geoData && geoData.length > 0 && geoData[0].address) {
-          const { state, state_district, county } = geoData[0].address;
-          if (state) setStateFilter(state);
-          const district = state_district || county || "";
-          if (district) setDistrictFilter(district.replace(/ District/i, ""));
+    if (userLocation?.state && !locationLoaded) {
+      setStateFilter(userLocation.state);
+      if (userLocation.district) setDistrictFilter(userLocation.district);
+      setLocationLoaded(true);
+    } else if (!locationLoaded && activeFarm?.location?.address) {
+      // Fallback geocode only if userLocation isn't set yet
+      (async () => {
+        try {
+          const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(activeFarm.location.address)}&addressdetails=1`);
+          const geoData = await geoRes.json();
+          if (geoData && geoData.length > 0 && geoData[0].address) {
+            const { state, state_district, county } = geoData[0].address;
+            if (state) setStateFilter(state);
+            const district = state_district || county || "";
+            if (district) setDistrictFilter(district.replace(/ District/i, ""));
+          }
+        } catch (err) {
+          console.error("Geocoding failed", err);
+        } finally {
+          setLocationLoaded(true);
         }
-      } catch (err) {
-        console.error("Geocoding failed", err);
-      } finally {
-        setLocationLoaded(true);
-      }
+      })();
     }
-    detectLocation();
-  }, [activeFarm?.location?.address, locationLoaded]);
+  }, [userLocation, activeFarm?.location?.address, locationLoaded]);
 
   // Fetch initial baseline data (States and Commodities)
   useEffect(() => {

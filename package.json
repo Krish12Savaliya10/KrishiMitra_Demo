@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "description": "Root workspace to start all KrishiMitra services",
   "scripts": {
-    "dev:api": "cd backend && npm run dev",
+    "dev:backend": "cd backend && export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES && ./venv/bin/python3 manage.py runserver 0.0.0.0:5001 --noreload",
     "dev:ui": "cd frontend && npm run dev",
-    "dev:ml": "cd ml-service && export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES && ./venv/bin/python3 manage.py runserver 0.0.0.0:5005 --noreload",
-    "dev": "concurrently --names \"API,UI,ML\" --prefix-colors \"green,cyan,yellow\" \"npm run dev:api\" \"npm run dev:ui\" \"npm run dev:ml\""
+    "dev": "concurrently --names \"BACKEND,UI\" --prefix-colors \"green,cyan\" \"npm run dev:backend\" \"npm run dev:ui\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

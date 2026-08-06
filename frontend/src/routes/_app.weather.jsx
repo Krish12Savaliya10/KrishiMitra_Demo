@@ -200,18 +200,12 @@ function LocationCard({ name, temp, condition, rain, active, onClick, onRemove }
 
 function WeatherPage() {
   const navigate = useNavigate();
-  const { token, activeFarm, setWeatherSnapshot, postScoped, alerts, fetchDashboardData } = useAppData();
+  const { token, activeFarm, userLocation, setWeatherSnapshot, postScoped, alerts, fetchDashboardData } = useAppData();
 
-  // Removed hacky DOM manipulation for background.
-  const [locations, setLocations] = useState([
-    { id: 1, query: "Surat, Gujarat" },
-    { id: 2, query: "Mumbai, Maharashtra" },
-    { id: 3, query: "Ahmedabad, Gujarat" },
-    { id: 4, query: "Pune, Maharashtra" },
-  ]);
+  const [locations, setLocations] = useState([]);
   const [locationData, setLocationData] = useState({});
   const [locationMeta, setLocationMeta] = useState({}); // { [id]: { source, ageMinutes, cachedAt } }
-  const [activeId, setActiveId] = useState(1);
+  const [activeId, setActiveId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -292,17 +286,26 @@ function WeatherPage() {
     }
   }, [locations, token]);
 
-  // If user has active farm, add it as first location on mount
+  // Auto-add the user's saved location as first entry on mount
   useEffect(() => {
-    if (activeFarm?.location?.address) {
-      const farmQuery = activeFarm.location.address;
+    if (userLocation?.query) {
+      const id = "user-home";
       setLocations(prev => {
-        if (prev.find(l => l.query === farmQuery)) return prev;
-        const newLoc = { id: Date.now(), query: farmQuery };
-        return [newLoc, ...prev];
+        if (prev.find(l => l.id === id)) return prev;
+        return [{ id, query: userLocation.query }, ...prev];
       });
+      setActiveId(id);
+    } else if (activeFarm?.location?.address) {
+      // fallback: use active farm location
+      const farmQuery = activeFarm.location.address;
+      const id = "farm-main";
+      setLocations(prev => {
+        if (prev.find(l => l.id === id)) return prev;
+        return [{ id, query: farmQuery }, ...prev];
+      });
+      setActiveId(id);
     }
-  }, [activeFarm]);
+  }, [userLocation, activeFarm]);
 
   // Search handler
   useEffect(() => {

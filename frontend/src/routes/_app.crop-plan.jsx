@@ -26,22 +26,7 @@ export const Route = createFileRoute("/_app/crop-plan")({
   component: CropPlanPage,
 });
 
-// Fallback demo stages when no data in DB
-const demoCropStages = [
-  { _id: "s1", stage: "Land Prep & Sowing", window: "Jun 15 – Jun 28", status: "done", tasks: 6 },
-  { _id: "s2", stage: "Germination & Establishment", window: "Jun 28 – Jul 12", status: "done", tasks: 4 },
-  { _id: "s3", stage: "Vegetative Growth", window: "Jul 12 – Aug 05", status: "active", tasks: 9 },
-  { _id: "s4", stage: "Flowering", window: "Aug 05 – Aug 22", status: "upcoming", tasks: 7 },
-  { _id: "s5", stage: "Pod Development", window: "Aug 22 – Sep 15", status: "upcoming", tasks: 5 },
-  { _id: "s6", stage: "Maturity & Harvest", window: "Sep 15 – Oct 02", status: "upcoming", tasks: 6 },
-];
-
-const milestones = [
-  { label: "First flowering expected", date: "Aug 07", tone: "primary" },
-  { label: "Critical irrigation checkpoint", date: "Aug 18", tone: "cyan" },
-  { label: "Pod-fill nutrition window", date: "Aug 26", tone: "warning" },
-  { label: "Harvest readiness assessment", date: "Sep 20", tone: "primary" },
-];
+// No demo/placeholder data — new users start with a clean empty state.
 
 // Stage-to-major-activities mapping for display
 const STAGE_ACTIVITIES = {
@@ -143,6 +128,7 @@ function CropPlanPage() {
   const [midwayPercent, setMidwayPercent] = useState(50);
   const [isStartingMidway, setIsStartingMidway] = useState(false);
   const [isDropping, setIsDropping] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState(null);
 
   useEffect(() => {
     if (search.crop) {
@@ -255,13 +241,22 @@ function CropPlanPage() {
     if (!activeFarmId || !token) return;
     try {
       const data = await fetchScoped("/crop-plans");
-      setCropPlans(Array.isArray(data) ? data : []);
+      const plans = Array.isArray(data) ? data : [];
+      setCropPlans(plans);
+      
+      // If we don't have a selection, or our selection no longer exists (e.g. dropped), pick the first
+      setSelectedPlanId(currentId => {
+        if (!currentId || !plans.find(p => p._id === currentId)) {
+          return plans.length > 0 ? plans[0]._id : null;
+        }
+        return currentId;
+      });
     } catch (err) {
       console.error(err);
     }
   }, [activeFarmId, token, fetchScoped]);
 
-  const activePlan = cropPlans[0];
+  const activePlan = cropPlans.find(p => p._id === selectedPlanId) || cropPlans[0] || null;
 
   useEffect(() => {
     fetchCropPlans();
@@ -337,7 +332,7 @@ function CropPlanPage() {
   }, [fetchCropPlans]);
 
   const cropStages = useMemo(() => {
-    if (!activePlan?.milestones?.length) return demoCropStages;
+    if (!activePlan?.milestones?.length) return [];
 
     const sortedMilestones = [...activePlan.milestones].sort((a, b) => new Date(a.plannedDate) - new Date(b.plannedDate));
     const harvestDate = activePlan.expectedHarvestDate ? new Date(activePlan.expectedHarvestDate) : null;
@@ -385,12 +380,12 @@ function CropPlanPage() {
       };
     });
   }, [activePlan, planTasks]);
-  const cropName = activePlan ? `${activePlan.cropName} (${activePlan.variety || "—"})` : "Soybean (JS 20-98)";
-  const sowingDate = activePlan?.sowingDate ? new Date(activePlan.sowingDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "22 Jun 2026";
-  const harvestDate = activePlan?.expectedHarvestDate ? new Date(activePlan.expectedHarvestDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Sep 25, 2026";
+  const cropName = activePlan ? `${activePlan.cropName}${activePlan.variety ? ` (${activePlan.variety})` : ""}` : "No active plan";
+  const sowingDate = activePlan?.sowingDate ? new Date(activePlan.sowingDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
+  const harvestDate = activePlan?.expectedHarvestDate ? new Date(activePlan.expectedHarvestDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
   const durationDays = activePlan?.sowingDate && activePlan?.expectedHarvestDate
     ? Math.max(1, Math.round((new Date(activePlan.expectedHarvestDate) - new Date(activePlan.sowingDate)) / (24 * 60 * 60 * 1000)))
-    : 100;
+    : 0;
 
   // Fetch RAG tips whenever the active stage changes
   const _activeCropName = activePlan?.cropName || "Soybean";
@@ -449,20 +444,45 @@ function CropPlanPage() {
   const activeStage = cropStages.find((s) => s.status === "active");
   const currentDay = activePlan?.sowingDate
     ? Math.max(0, Math.round((new Date() - new Date(activePlan.sowingDate)) / (24 * 60 * 60 * 1000)))
-    : done * 14;
-  const planMilestones = activePlan
-    ? cropStages.slice(0, 4).map((s, i) => ({
-        label: s.stage,
-        date: s.window.split(" - ")[0],
-        tone: i === 0 ? "primary" : i === 1 ? "cyan" : "warning",
-      }))
-    : milestones;
+    : 0;
+  const planMilestones = cropStages.slice(0, 4).map((s, i) => ({
+    label: s.stage,
+    date: s.window.split(" - ")[0],
+    tone: i === 0 ? "primary" : i === 1 ? "cyan" : "warning",
+  }));
+
+  // Guard: if no farm exists, show a prompt to create one first
+  const { farms } = useAppData();
+  if (!farms || farms.length === 0) {
+    return (
+      <div>
+        <PageHeader title="Crop Plan" subtitle="Generate AI-powered crop schedules for your farm" />
+        <div className="flex flex-col items-center justify-center py-24 px-6 text-center gap-5">
+          <div className="rounded-full bg-primary/10 p-5">
+            <Sprout className="h-10 w-10 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-foreground">Add a Farm First</h2>
+            <p className="mt-2 text-sm text-muted-foreground max-w-sm">
+              A crop plan is tied to a specific farm. Please create your farm before generating a crop plan.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate({ to: "/farms" })}
+            className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_0_24px_-8px_var(--color-primary)] transition-transform hover:scale-[1.03]"
+          >
+            <Sprout className="h-4 w-4" /> Go to Farms
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <PageHeader
-        title={`Crop Plan — ${cropName}`}
-        subtitle={`Sown ${sowingDate} · Day ${currentDay} of ${durationDays}`}
+        title={`Crop Plan${activePlan ? ` — ${cropName}` : ""}`}
+        subtitle={activePlan ? `Sown ${sowingDate} · Day ${currentDay} of ${durationDays}` : "Generate an AI-powered crop schedule for your farm"}
         action={
           <div className="flex items-center gap-2">
             <FarmSwitcher />
@@ -500,6 +520,28 @@ function CropPlanPage() {
           </div>
         }
       />
+
+      {/* Plan Switcher Tabs - only show if there are multiple plans */}
+      {cropPlans.length > 1 && (
+        <div className="mb-6 flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          {cropPlans.map((plan) => {
+            const isSelected = selectedPlanId === plan._id || (!selectedPlanId && activePlan?._id === plan._id);
+            return (
+              <button
+                key={plan._id}
+                onClick={() => setSelectedPlanId(plan._id)}
+                className={`whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                  isSelected
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "bg-secondary/60 text-foreground hover:bg-secondary"
+                }`}
+              >
+                {plan.cropName} {plan.variety ? `(${plan.variety})` : ""}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {isMidwayModalOpen && activePlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
@@ -641,8 +683,29 @@ function CropPlanPage() {
         </div>
       )}
 
-      {/* Summary band */}
-      <section className="glass mb-6 grid gap-5 rounded-2xl p-6 sm:grid-cols-4">
+      {/* Empty state when farm exists but no crop plan yet */}
+      {!activePlan && (
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center gap-5">
+          <div className="rounded-full bg-primary/10 p-5">
+            <Sprout className="h-10 w-10 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-foreground">No Crop Plan Yet</h2>
+            <p className="mt-2 text-sm text-muted-foreground max-w-sm">
+              Generate an AI-powered crop plan for <span className="font-semibold text-foreground">{activeFarm?.name || "your farm"}</span>. It will include a full growth-stage roadmap and daily task schedule.
+            </p>
+          </div>
+          <button
+            onClick={() => setIsAiModalOpen(true)}
+            className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_0_24px_-8px_var(--color-primary)] transition-transform hover:scale-[1.03]"
+          >
+            <Sparkles className="h-4 w-4" /> Generate Plan with AI
+          </button>
+        </div>
+      )}
+
+      {/* Summary band — only shown when a real plan exists */}
+      {activePlan && <section className="glass mb-6 grid gap-5 rounded-2xl p-6 sm:grid-cols-4">
         {[
           [<Sprout key="i" className="h-4 w-4 text-primary" />, "Current stage", activeStage?.stage || "—"],
           [<CalendarRange key="i" className="h-4 w-4 text-cyan" />, "Est. duration", `${durationDays} days`],
@@ -659,10 +722,11 @@ function CropPlanPage() {
             </div>
           </div>
         ))}
-      </section>
+      </section>}
 
-      {/* Progress bar */}
-      <div className="glass mb-6 rounded-2xl p-5">
+
+      {/* Progress bar — only when a real plan exists */}
+      {activePlan && <div className="glass mb-6 rounded-2xl p-5">
         <div className="flex items-center justify-between text-xs mb-1">
           <span className="font-semibold">Season progress</span>
           <span className="font-display font-bold text-primary">{seasonProgress}%</span>
@@ -694,7 +758,7 @@ function CropPlanPage() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {activePlan && (
         <section className="glass mb-6 rounded-2xl p-5">

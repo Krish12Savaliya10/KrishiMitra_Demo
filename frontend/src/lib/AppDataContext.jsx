@@ -14,6 +14,21 @@ export function AppDataProvider({ children }) {
   
   const [userProfile, setUserProfile] = useState({ name: "Guest User", role: "farmer" });
 
+  // --- Saved user location: city, state, district, lat, lon ---
+  // This is the single source of truth that Weather and Market pages auto-fill from.
+  const [userLocation, setUserLocationState] = useState(() => {
+    try {
+      const saved = localStorage.getItem("user_location");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+
+  const setUserLocation = (loc) => {
+    setUserLocationState(loc);
+    if (loc) localStorage.setItem("user_location", JSON.stringify(loc));
+    else localStorage.removeItem("user_location");
+  };
+
   // --- Multi-farm state ---
   const [farms, setFarms] = useState([]); // full list of the user's farms from the backend
   const [activeFarmId, setActiveFarmId] = useState(() => {
@@ -38,7 +53,8 @@ export function AppDataProvider({ children }) {
   };
   // Derived: the farm object currently selected. Falls back to the first farm
   // if nothing is selected yet (e.g. right after login).
-  const activeFarm = farms.find((f) => f._id === activeFarmId) || farms[0] || null;
+  // Support both Django integer `id` and MongoDB `_id`
+  const activeFarm = farms.find((f) => String(f._id) === String(activeFarmId) || String(f.id) === String(activeFarmId)) || farms[0] || null;
 
   // Persist the selection so it survives a refresh
   useEffect(() => {
@@ -47,8 +63,8 @@ export function AppDataProvider({ children }) {
 
   // If farms load and nothing is selected yet (or the selected id no longer exists), default to the first farm
   useEffect(() => {
-    if (farms.length > 0 && !farms.find((f) => f._id === activeFarmId)) {
-      setActiveFarmId(farms[0]._id);
+    if (farms.length > 0 && !farms.find((f) => String(f._id) === String(activeFarmId) || String(f.id) === String(activeFarmId))) {
+      setActiveFarmId(farms[0]._id || String(farms[0].id));
     }
   }, [farms]);
 
@@ -85,7 +101,13 @@ export function AppDataProvider({ children }) {
         headers: { Authorization: `Bearer ${token}` }
       });
       const farmsData = await farmsRes.json();
-      setFarms(Array.isArray(farmsData) ? farmsData : []);
+      // Normalize: Django uses `id`, frontend uses `_id`. Support both.
+      const normalizedFarms = (Array.isArray(farmsData) ? farmsData : []).map(f => ({
+        ...f,
+        _id: f._id || String(f.id),
+        id: f.id || f._id,
+      }));
+      setFarms(normalizedFarms);
 
 
       // 4. Fetch Alerts and Notifications
@@ -166,6 +188,8 @@ export function AppDataProvider({ children }) {
     <AppDataContext.Provider
       value={{
         userProfile,
+        userLocation,
+        setUserLocation,
         farms,
         activeFarm,
         activeFarmId,

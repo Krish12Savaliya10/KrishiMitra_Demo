@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Droplets, MapPin, Plus, Ruler, Satellite, Sprout, CheckCircle2, AlertCircle } from "lucide-react";
+import { Droplets, MapPin, Plus, Ruler, Satellite, Sprout, CheckCircle2, AlertCircle, Crosshair } from "lucide-react";
 import { useState } from "react";
 import { useAppData } from "@/lib/AppDataContext";
 import { PageHeader } from "@/components/app/AppShell";
@@ -36,14 +36,61 @@ const emptyForm = {
 };
 
 function FarmsPage() {
-  const { farms, token, fetchDashboardData, setActiveFarmId } = useAppData();
+  const { farms, token, fetchDashboardData, setActiveFarmId, setUserLocation } = useAppData();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingFarm, setEditingFarm] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState({});
+  const [isLocating, setIsLocating] = useState(false);
 
   const API_URL = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api");
+
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser");
+      return;
+    }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`
+          );
+          if (!res.ok) throw new Error("Geocoding failed");
+          const data = await res.json();
+          if (data && data.address) {
+            const city = data.address.city || data.address.town || data.address.village || data.address.county || "";
+            const state = data.address.state || "";
+            const district = data.address.state_district || data.address.county || "";
+            const locString = [city, state].filter(Boolean).join(", ");
+            if (locString) {
+              setFormData((prev) => ({ ...prev, location: locString }));
+              // Save enriched location globally so Weather/Market pages auto-fill
+              setUserLocation({
+                query: locString, city, state, district,
+                lat: pos.coords.latitude, lon: pos.coords.longitude,
+              });
+              toast.success("Location detected and saved!");
+            } else {
+              toast.error("Could not resolve city/state from location.");
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          toast.error("Failed to detect location address");
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      (err) => {
+        console.error(err);
+        toast.error("Could not get location. Please check browser permissions.");
+        setIsLocating(false);
+      }
+    );
+  };
 
   const totalArea = farms.reduce((s, f) => s + (f.areaAcres || 0), 0);
   const activeCount = farms.filter((f) => f.isActive).length;
@@ -120,7 +167,25 @@ function FarmsPage() {
       if (res.ok) {
         const savedFarm = await res.json();
         
-        // Save soil report if fields are filled
+        // Geocode the location string and save rich location globally so Weather/Market auto-fill
+        if (formData.location) {
+          try {
+            const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.location)}&addressdetails=1&limit=1`);
+            const geoData = await geoRes.json();
+            if (geoData && geoData.length > 0) {
+              const addr = geoData[0].address || {};
+              const city = addr.city || addr.town || addr.village || addr.county || formData.location.split(",")[0]?.trim() || "";
+              const state = addr.state || "";
+              const district = addr.state_district || addr.county || "";
+              setUserLocation({
+                query: formData.location,
+                city, state, district,
+                lat: parseFloat(geoData[0].lat),
+                lon: parseFloat(geoData[0].lon),
+              });
+            }
+          } catch (_) { /* non-critical */ }
+        }
         setIsAddOpen(false);
         setEditingFarm(null);
         setFormData(emptyForm);
@@ -301,7 +366,18 @@ function FarmsPage() {
             </div>
             <div>
               <label htmlFor="location" className="mb-1 block text-[11px] font-medium text-muted-foreground">Location</label>
-              <input id="location" placeholder="e.g. Pune, Maharashtra" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})} className="w-full rounded-xl border border-input bg-secondary/40 px-3.5 py-2 text-sm outline-none transition-colors focus:border-primary/50" />
+              <div className="flex gap-2">
+                <input id="location" placeholder="e.g. Pune, Maharashtra" value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})} className="flex-1 rounded-xl border border-input bg-secondary/40 px-3.5 py-2 text-sm outline-none transition-colors focus:border-primary/50" />
+                <button
+                  type="button"
+                  onClick={handleGetCurrentLocation}
+                  disabled={isLocating}
+                  className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+                  title="Use my current location"
+                >
+                  <Crosshair className={`h-4 w-4 ${isLocating ? "animate-spin" : ""}`} />
+                </button>
+              </div>
             </div>
             <div>
               <label htmlFor="soilType" className="mb-1 block text-[11px] font-medium text-muted-foreground">Soil Type</label>

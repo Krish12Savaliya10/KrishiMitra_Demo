@@ -1,0 +1,16 @@
+django<5.1
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+django-apscheduler
+apscheduler<4.0
+python-dotenv
+chromadb
+sentence-transformers
+Pillow
+numpy
+pandas
+opencv-python-headless
+ultralytics
+joblib
+requests
