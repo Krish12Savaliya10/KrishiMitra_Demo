@@ -225,6 +225,40 @@ class CropPlanViewSet(OwnerViewSet):
         # Optionally handle startOver and scheduleDate from request.data
         return Response({'message': 'Daily schedule started'})
 
+    @action(detail=True, methods=['post'], url_path='shift-today')
+    def shift_today(self, request, pk=None):
+        from datetime import timedelta
+        plan = self.get_object()
+        
+        # 1. Push all pending tasks currently in the DB forward by 1 day
+        from .models import ScheduleTask
+        tasks = ScheduleTask.objects.filter(cropPlan=plan, status__in=["pending", "delayed"])
+        for t in tasks:
+            t.date = t.date + timedelta(days=1)
+            t.save()
+            
+        # 2. Shift the sowingDate forward by 1 day so future JIT tasks also shift
+        plan.sowingDate = plan.sowingDate + timedelta(days=1)
+        plan.expectedHarvestDate = plan.expectedHarvestDate + timedelta(days=1)
+        plan.driftDays += 1
+        
+        # 3. Shift milestones
+        if isinstance(plan.milestones, list):
+            from datetime import datetime
+            updated = []
+            for m in plan.milestones:
+                if m.get('status') == 'pending' and m.get('plannedDate'):
+                    try:
+                        orig = datetime.fromisoformat(m['plannedDate'])
+                        m['plannedDate'] = (orig + timedelta(days=1)).isoformat()
+                    except:
+                        pass
+                updated.append(m)
+            plan.milestones = updated
+            
+        plan.save()
+        return Response({'message': 'Schedule shifted successfully'})
+
     @action(detail=False,
             methods=['get'],
             url_path='supported-crops',
@@ -313,6 +347,44 @@ class ScheduleTaskViewSet(OwnerViewSet):
         if farm_id:
             qs = qs.filter(farm_id=farm_id)
         return qs.order_by('date')
+
+    @action(detail=False, methods=['post'], url_path='shift-today')
+    def shift_today(self, request):
+        farm_id = request.headers.get('Farm-Id') or request.data.get('farm_id')
+        if not farm_id:
+            return Response({'error': 'Farm ID required'}, status=400)
+            
+        from .models import CropPlan
+        plan = CropPlan.objects.filter(farm_id=farm_id, status='active', owner=request.user).first()
+        if not plan:
+            return Response({'error': 'No active crop plan'}, status=404)
+            
+        from datetime import timedelta
+        from .models import ScheduleTask
+        tasks = ScheduleTask.objects.filter(cropPlan=plan, status__in=["pending", "delayed"])
+        for t in tasks:
+            t.date = t.date + timedelta(days=1)
+            t.save()
+            
+        plan.sowingDate = plan.sowingDate + timedelta(days=1)
+        plan.expectedHarvestDate = plan.expectedHarvestDate + timedelta(days=1)
+        plan.driftDays += 1
+        
+        if isinstance(plan.milestones, list):
+            from datetime import datetime
+            updated = []
+            for m in plan.milestones:
+                if m.get('status') == 'pending' and m.get('plannedDate'):
+                    try:
+                        orig = datetime.fromisoformat(m['plannedDate'])
+                        m['plannedDate'] = (orig + timedelta(days=1)).isoformat()
+                    except:
+                        pass
+                updated.append(m)
+            plan.milestones = updated
+            
+        plan.save()
+        return Response({'message': 'Schedule shifted successfully'})
 
 
 class RecommendationViewSet(OwnerViewSet):

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Check, ChevronRight, Clock, Plus, SkipForward, Sparkles, Timer, Loader2 } from "lucide-react";
+import { Check, ChevronRight, Clock, Plus, SkipForward, Sparkles, Timer, Loader2, ArrowRightCircle } from "lucide-react";
 import { useAppData } from "@/lib/AppDataContext";
 import { PageHeader } from "@/components/app/AppShell";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -37,6 +37,7 @@ function SchedulePage() {
   const [tasks, setTasks] = useState([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isShifting, setIsShifting] = useState(false);
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [note, setNote] = useState("");
   const [recommendation, setRecommendation] = useState(null);
@@ -165,6 +166,24 @@ function SchedulePage() {
     }
   };
 
+  const handleShiftToday = async () => {
+    if (!activeFarmId) return toast.error("Select a farm first");
+    setIsShifting(true);
+    try {
+      const res = await postScoped("/schedule/shift-today/");
+      if (res && res.message) {
+        toast.success("Schedule shifted by 1 day");
+        fetchTasks();
+      } else {
+        toast.error("Failed to shift schedule");
+      }
+    } catch (err) {
+      toast.error("Error shifting schedule");
+    } finally {
+      setIsShifting(false);
+    }
+  };
+
   const handleSaveNote = async () => {
     if (!note.trim()) return;
     if (!activeFarmId) return toast.error("Select a farm first");
@@ -203,6 +222,14 @@ function SchedulePage() {
         action={
           <div className="flex items-center gap-2">
             <FarmSwitcher />
+            <button
+              onClick={handleShiftToday}
+              disabled={isShifting}
+              className="flex items-center gap-1.5 rounded-xl border border-border bg-secondary/30 px-3 py-2 text-xs font-semibold text-secondary-foreground transition-all hover:bg-secondary/50 disabled:opacity-50"
+            >
+              {isShifting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRightCircle className="h-3.5 w-3.5" />}
+              Shift Today
+            </button>
             <button
               onClick={() => setIsAddOpen(true)}
               className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-[0_0_24px_-8px_var(--color-primary)] transition-transform hover:scale-[1.03]"
