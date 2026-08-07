@@ -205,7 +205,7 @@ def build_tasks_for_day(crop_plan, crop_def, growth_stages, day, inspection_seq)
 
     return tasks
 
-def generate_schedule_for_crop_plan(crop_plan, source="fallback", start_day=0):
+def generate_schedule_for_crop_plan(crop_plan, source="fallback", start_day=0, end_day=None):
     start_day = max(0, int(start_day or 0))
     crop_def = next((c for c in CROP_DATABASE if c['name'] == crop_plan.cropName), None)
     if not crop_def:
@@ -226,13 +226,19 @@ def generate_schedule_for_crop_plan(crop_plan, source="fallback", start_day=0):
     crop_plan.seasonProgressPct = round((start_day / crop_def['durationDays']) * 100) if start_day > 0 else season_progress_pct
     crop_plan.save()
 
-    ScheduleTask.objects.filter(cropPlan=crop_plan).delete()
+    loop_end = crop_def['durationDays']
+    if end_day is not None:
+        loop_end = min(loop_end, int(end_day))
 
     tasks_to_create = []
-    seen_keys = set()
-    inspection_seq = 0
+    
+    # Identify already generated tasks to avoid duplicates in the rolling window
+    existing_tasks = ScheduleTask.objects.filter(cropPlan=crop_plan, dayNumber__gte=start_day, dayNumber__lte=loop_end)
+    seen_keys = set([f"{t.dayNumber}::{t.title}" for t in existing_tasks])
+    
+    inspection_seq = ScheduleTask.objects.filter(cropPlan=crop_plan, category="monitoring").count()
 
-    for day in range(start_day, crop_def['durationDays'] + 1):
+    for day in range(start_day, loop_end + 1):
         day_tasks = build_tasks_for_day(crop_plan, crop_def, crop_def['growthStages'], day, inspection_seq)
         
         for task_dict in day_tasks:

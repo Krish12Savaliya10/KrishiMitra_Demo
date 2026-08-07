@@ -207,7 +207,8 @@ class CropPlanViewSet(OwnerViewSet):
         plan = serializer.save(owner=self.request.user)
         try:
             from .services.schedule_engine import generate_schedule_for_crop_plan
-            generate_schedule_for_crop_plan(plan, start_day=0)
+            # Only generate the first 3 days of tasks on plan creation
+            generate_schedule_for_crop_plan(plan, start_day=0, end_day=3)
         except Exception as e:
             import logging
             logging.getLogger("krishi_core").error("Failed to generate schedule: %s", e) 
@@ -750,6 +751,21 @@ def daily_tasks(request):
 
     target_date = datetime.strptime(
         date_str, "%Y-%m-%d").date() if date_str else timezone.now().date()
+
+    # --- JIT Generation ---
+    from .services.schedule_engine import generate_schedule_for_crop_plan
+    
+    # Calculate elapsed days since sowing
+    sowing_date = plan.sowingDate.date() if hasattr(plan.sowingDate, 'date') else plan.sowingDate
+    elapsed_days = max(0, (target_date - sowing_date).days)
+    
+    # Generate tasks for today and the next 3 days dynamically (Rolling Window)
+    try:
+        generate_schedule_for_crop_plan(plan, start_day=max(0, elapsed_days - 1), end_day=elapsed_days + 3)
+    except Exception as e:
+        import logging
+        logging.getLogger("krishi_core").error("JIT schedule generation failed: %s", e)
+    # ----------------------
 
     # 1. Fetch weather
     weather = WeatherProvider.get_forecast(
