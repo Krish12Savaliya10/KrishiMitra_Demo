@@ -3,13 +3,13 @@
 ## Project Architecture Overview
 KrishiMitra is a comprehensive Farm Management and Precision Agriculture system.
 - **Frontend**: A React application (built with Vite / TanStack Start) providing UI for scheduling, dashboards, crop planning, weather, and AI Chat.
-- **Backend**: A Node.js/Express REST API serving the frontend, communicating with MongoDB for persistence, and connecting to an ML backend for intelligent features.
-- **ML Backend**: A Flask application serving machine learning predictions (e.g., random forest model), Open-Meteo weather integration, and RAG capabilities (using LangChain and ChromaDB) for the AI Saathi.
+- **Backend Server**: A unified Django application handling the API, ORM (db.sqlite3), and JWT authentication using Django REST Framework.
+- **ML Backend**: The machine learning endpoints (Random Forest, Open-Meteo, RAG with ChromaDB) are directly integrated into the Django backend using DRF views.
 
-## Execution Flow
-1. **Frontend to Backend**: React components (e.g., `_app.schedule.jsx`) make HTTP requests to the Express API (e.g., `/api/schedule`).
-2. **Backend**: Express routes pass requests to controllers (`crudFactory.js`), which perform validation and interact with MongoDB via Mongoose models.
-3. **AI/ML Interactions**: When AI recommendations or crop disease queries occur, the Express backend makes HTTP calls to the ML Flask service (port 5005). The ML service runs inference or vector DB queries and returns predictions/RAG context back to the Node.js backend.
+### System Architecture
+1. **Frontend**: Vite + React App
+2. **Backend**: Django REST Framework serving API endpoints on port 5001.
+3. **AI/ML Interactions**: The Django backend natively loads the ML models into memory and serves predictions and RAG context directly through its DRF views.
 
 ## Key Files & Purpose
 

@@ -59,21 +59,7 @@ This project was built to comprehensively demonstrate the topics outlined in the
 | Deep learning / CNN / transfer learning | `ml-service/train_disease_model.py` (EfficientNet) |
 | Web scraping / REST ingestion | `ml-service/weather/services/openmeteo_service.py` |
 
----
 
-## ⚠️ Important Syllabus Note: Flask vs Django
-
-The FCSP-2 syllabus explicitly covers **Django MVT and Django REST Framework**. However, this project utilizes **Flask** for the ML microservice. 
-
-**Why Flask?** In modern AI engineering, Flask is the industry-standard lightweight wrapper for serving TensorFlow, PyTorch, and Scikit-Learn models, whereas Django is a heavyweight framework designed primarily for ORM-driven MVC apps. Since our Node.js/MongoDB backend already fully handles the database, authentication, and CRUD logic (satisfying the FSD-2 requirements), forcing a redundant Django server into the architecture would be an anti-pattern. 
-
-**Equivalence Mapping:**
-If this service were written in Django, the architectural mapping would be exactly equivalent:
-* **Flask `@app.route`** ≈ Django `urls.py` + `@api_view`
-* **Flask View Functions** ≈ Django `views.py` (MVT "Views")
-* **Flask `jsonify()`** ≈ Django REST Framework `Response()`
-
----
 
 ## 🚀 Setup & Run Instructions
 
