@@ -24,6 +24,7 @@ urlpatterns = [
     path('auth/me', views.auth_me, name='auth_me'),
     path('auth/profile', views.auth_update_profile, name='auth_update_profile'),
     path('auth/forgot-password', views.auth_forgot_password, name='auth_forgot_password'),
+    path('auth/reset-password', views.auth_reset_password, name='auth_reset_password'),
 
     # Mocks
     path('auth/google', views.auth_google, name='auth_google'),

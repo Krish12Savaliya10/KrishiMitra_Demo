@@ -55,7 +55,9 @@ function AuthPage() {
   const { login } = useAppData();
 
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
-  const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
+  const [forgotPasswordStep, setForgotPasswordStep] = useState("email"); // email -> otp -> success
+  const [forgotPasswordOTP, setForgotPasswordOTP] = useState("");
+  const [forgotPasswordNew, setForgotPasswordNew] = useState("");
   const [forgotError, setForgotError] = useState("");
 
   const [isLocating, setIsLocating] = useState(false);
@@ -257,7 +259,31 @@ function AuthPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
-      setForgotPasswordSent(true);
+      setForgotPasswordStep("otp");
+    } catch (err) {
+      setForgotError(err.message);
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e) => {
+    e.preventDefault();
+    setForgotError("");
+    if (!forgotPasswordOTP.trim() || !forgotPasswordNew.trim()) { setForgotError("Please fill all fields"); return; }
+    
+    const API_URL =
+      import.meta.env.VITE_API_URL ||
+      (typeof window !== "undefined"
+        ? `http://${window.location.hostname}:5001/api`
+        : "http://localhost:5001/api");
+    try {
+      const res = await fetch(`${API_URL}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotPasswordEmail, otp: forgotPasswordOTP, newPassword: forgotPasswordNew }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setForgotPasswordStep("success");
     } catch (err) {
       setForgotError(err.message);
     }
@@ -275,13 +301,56 @@ function AuthPage() {
               Enter your email address and we'll send you a link to reset your password.
             </p>
           </div>
-          {forgotPasswordSent ? (
+          {forgotPasswordStep === "success" ? (
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4">
               <div className="flex items-center gap-2 text-primary font-semibold mb-1">
-                <CheckCircle2 className="h-4 w-4" /> Email Sent
+                <CheckCircle2 className="h-4 w-4" /> Password Reset Successful
               </div>
-              <p className="text-xs text-muted-foreground">Check your inbox for the reset link.</p>
+              <p className="text-xs text-muted-foreground">You can now login with your new password.</p>
+              <button
+                type="button"
+                onClick={() => { setMode("login"); setForgotPasswordStep("email"); }}
+                className="mt-4 w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90"
+              >
+                Return to Login
+              </button>
             </div>
+          ) : forgotPasswordStep === "otp" ? (
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+              {forgotError && (
+                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <p>{forgotError}</p>
+                </div>
+              )}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-foreground">6-Digit OTP</label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={forgotPasswordOTP}
+                  onChange={(e) => { setForgotPasswordOTP(e.target.value); setForgotError(""); }}
+                  placeholder="123456"
+                  className="w-full rounded-xl border border-input bg-background/50 px-3.5 py-3 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-foreground">New Password</label>
+                <input
+                  type="password"
+                  value={forgotPasswordNew}
+                  onChange={(e) => { setForgotPasswordNew(e.target.value); setForgotError(""); }}
+                  placeholder="Enter new password"
+                  className="w-full rounded-xl border border-input bg-background/50 px-3.5 py-3 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90"
+              >
+                Reset Password
+              </button>
+            </form>
           ) : (
             <>
               <div>
@@ -308,7 +377,7 @@ function AuthPage() {
               </div>
               <div className="mt-4 flex gap-3">
                 <button type="button" onClick={() => setMode("login")} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium hover:bg-secondary/20">Back</button>
-                <button type="button" onClick={handleForgotPasswordSubmit} className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground hover:opacity-90">Send Link</button>
+                <button type="button" onClick={handleForgotPasswordSubmit} className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground hover:opacity-90">Send OTP</button>
               </div>
             </>
           )}
@@ -420,8 +489,11 @@ function AuthPage() {
     }
   };
 
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "336826620573-mockclientid.apps.googleusercontent.com";
+
   return (
-    <div className="grid min-h-screen bg-background lg:grid-cols-2">
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <div className="grid min-h-screen bg-background lg:grid-cols-2">
       {/* Left: form */}
       <div className="hero-ambient relative flex flex-col px-5 py-6 sm:px-10 h-[100dvh] overflow-y-auto">
         <div className="flex items-center justify-between w-full">
@@ -515,17 +587,15 @@ function AuthPage() {
                     </div>
                   </div>
                   <div className="mt-6 flex justify-center">
-                    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "123456789-mock.apps.googleusercontent.com"}>
-                      <GoogleLogin
-                        onSuccess={handleGoogleSuccess}
-                        onError={() => setApiError("Google login failed. Please try again.")}
-                        theme="outline"
-                        size="large"
-                        text={mode === "login" ? "signin_with" : "signup_with"}
-                        shape="rectangular"
-                        width="340"
-                      />
-                    </GoogleOAuthProvider>
+                    <GoogleLogin
+                      onSuccess={handleGoogleSuccess}
+                      onError={() => setApiError("Google login failed. Please try again.")}
+                      theme="outline"
+                      size="large"
+                      text={mode === "login" ? "signin_with" : "signup_with"}
+                      shape="rectangular"
+                      width="340"
+                    />
                   </div>
                 </>
               )}
@@ -598,6 +668,7 @@ function AuthPage() {
         </div>
       </div>
     </div>
+    </GoogleOAuthProvider>
   );
 }
 

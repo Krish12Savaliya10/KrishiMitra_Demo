@@ -157,14 +157,113 @@ def auth_update_profile(request):
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def auth_google(request):
-    return Response(
-        {'message': 'Google Auth not implemented in this demo.'}, status=400)
+    from google.oauth2 import id_token
+    from google.auth.transport import requests as google_requests
+    from django.conf import settings
+    
+    token = request.data.get('credential')
+    if not token:
+        return Response({'message': 'No token provided'}, status=400)
+        
+    try:
+        # Specify the CLIENT_ID of the app that accesses the backend:
+        idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), getattr(settings, 'GOOGLE_CLIENT_ID', ''))
+        
+        email = idinfo['email']
+        first_name = idinfo.get('given_name', '')
+        last_name = idinfo.get('family_name', '')
+        google_id = idinfo['sub']
+        
+        user = User.objects.filter(email=email).first()
+        if not user:
+            user = User.objects.create(
+                username=email,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                googleId=google_id,
+                isVerified=True,
+                phone=email # Fallback for unique constraint
+            )
+            user.set_unusable_password()
+            user.save()
+            
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'token': str(refresh.access_token),
+            'user': UserSerializer(user).data
+        })
+    except ValueError:
+        # Invalid token
+        return Response({'message': 'Invalid Google token'}, status=400)
 
 
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
 def auth_forgot_password(request):
-    """Stub endpoint for forgot password."""
-    return Response(
-        {'message': 'If this email is registered, a reset link has been sent.'})
+    from django.core.mail import send_mail
+    from django.conf import settings
+    from django.utils import timezone
+    from datetime import timedelta
+    import random
+    
+    email = request.data.get('email')
+    user = User.objects.filter(email=email).first()
+    
+    if user:
+        # Generate 6-digit OTP
+        otp_code = str(random.randint(100000, 999999))
+        
+        # Save OTP to DB
+        PasswordResetOTP.objects.filter(user=user).delete() # Remove old OTPs
+        PasswordResetOTP.objects.create(
+            user=user,
+            otp=otp_code,
+            expires_at=timezone.now() + timedelta(minutes=15)
+        )
+        
+        # Send email
+        try:
+            send_mail(
+                'KrishiMitra - Password Reset OTP',
+                f'Your password reset OTP is: {otp_code}. It will expire in 15 minutes.',
+                getattr(settings, 'EMAIL_HOST_USER', 'noreply@krishimitra.com'),
+                [email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger("krishi_core").error("Failed to send email: %s", e)
+            return Response({'message': 'Failed to send email. Check SMTP settings.'}, status=500)
+            
+    return Response({'message': 'If this email is registered, a reset OTP has been sent.'})
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def auth_reset_password(request):
+    email = request.data.get('email')
+    otp_code = request.data.get('otp')
+    new_password = request.data.get('newPassword')
+    
+    user = User.objects.filter(email=email).first()
+    if not user:
+        return Response({'message': 'Invalid request.'}, status=400)
+        
+    otp_record = PasswordResetOTP.objects.filter(user=user).last()
+    
+    if not otp_record or not otp_record.is_valid():
+        return Response({'message': 'OTP has expired or does not exist.'}, status=400)
+        
+    if otp_record.otp != otp_code:
+        return Response({'message': 'Invalid OTP.'}, status=400)
+        
+    user.set_password(new_password)
+    user.save()
+    
+    # Clean up OTP
+    otp_record.delete()
+    
+    return Response({'message': 'Password has been reset successfully. You can now login.'})
 
 # ─── CRUD ViewSets ──────────────────────────────────────────────────────
 
