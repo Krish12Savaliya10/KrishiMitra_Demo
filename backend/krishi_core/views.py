@@ -203,6 +203,15 @@ class CropPlanViewSet(OwnerViewSet):
             qs = qs.filter(farm_id=farm_id)
         return qs
 
+    def perform_create(self, serializer):
+        plan = serializer.save(owner=self.request.user)
+        try:
+            from .services.schedule_engine import generate_schedule_for_crop_plan
+            generate_schedule_for_crop_plan(plan, start_day=0)
+        except Exception as e:
+            import logging
+            logging.getLogger("krishi_core").error("Failed to generate schedule: %s", e) 
+
     @action(detail=True, methods=['post'], url_path='drop')
     def drop_plan(self, request, pk=None):
         plan = self.get_object()
