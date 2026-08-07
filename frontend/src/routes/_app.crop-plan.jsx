@@ -131,8 +131,9 @@ function CropPlanPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [previewPlan, setPreviewPlan] = useState(null);
-  const [aiForm, setAiForm] = useState({ cropName: "" });
+  const [aiForm, setAiForm] = useState({ cropName: "", companionCrop: "" });
   const [supportedCrops, setSupportedCrops] = useState([]);
+  const [companionSuggestions, setCompanionSuggestions] = useState([]);
   const [isMidwayModalOpen, setIsMidwayModalOpen] = useState(false);
   const [midwayPercent, setMidwayPercent] = useState(50);
   const [isStartingMidway, setIsStartingMidway] = useState(false);
@@ -153,6 +154,17 @@ function CropPlanPage() {
       .catch(err => console.error("Failed to load supported crops:", err));
   }, []);
 
+  useEffect(() => {
+    if (aiForm.cropName) {
+      fetch(`${API_URL}/crop-plans/companion-suggestions/?crop=${aiForm.cropName}`)
+        .then(r => r.json())
+        .then(data => setCompanionSuggestions(Array.isArray(data) ? data : []))
+        .catch(err => console.error("Failed to load companion suggestions:", err));
+    } else {
+      setCompanionSuggestions([]);
+    }
+  }, [aiForm.cropName]);
+
   const handleAiSubmit = async (e) => {
     e.preventDefault();
     const month = new Date().getMonth();
@@ -164,7 +176,12 @@ function CropPlanPage() {
     
     const area = activeFarm?.areaAcres || 1;
     const irrigation = activeFarm?.waterResources?.length > 0 ? activeFarm.waterResources.join(', ') : "Rainfed";
-    const prompt = `@cropPlan Generate a crop plan. Crop: ${aiForm.cropName}, Season: ${computedSeason}, Area: ${area} acres, Irrigation: ${irrigation}.`;
+    
+    let prompt = `@cropPlan Generate a crop plan. Crop: ${aiForm.cropName}`;
+    if (aiForm.companionCrop) {
+      prompt = `@cropPlan Generate an intercropping plan for Primary Crop: ${aiForm.cropName} and Companion Crop: ${aiForm.companionCrop}. Generate integrated milestones and tasks for both crops growing simultaneously.`;
+    }
+    prompt += `, Season: ${computedSeason}, Area: ${area} acres, Irrigation: ${irrigation}.`;
     
     setIsGenerating(true);
     try {
@@ -600,11 +617,24 @@ function CropPlanPage() {
             <form onSubmit={handleAiSubmit} className="space-y-4">
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">Crop Name</label>
-                <select required value={aiForm.cropName} onChange={e => setAiForm({...aiForm, cropName: e.target.value})} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none">
+                <select required value={aiForm.cropName} onChange={e => setAiForm({...aiForm, cropName: e.target.value, companionCrop: ""})} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none">
                   <option value="">Select a crop...</option>
                   {supportedCrops.map(crop => <option key={crop} value={crop}>{crop}</option>)}
                 </select>
               </div>
+              
+              {aiForm.cropName && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Companion Crop / Intercropping (Optional)</label>
+                  <select value={aiForm.companionCrop || ""} onChange={e => setAiForm({...aiForm, companionCrop: e.target.value})} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none">
+                    <option value="">None (Single Crop)</option>
+                    {companionSuggestions.map(crop => <option key={crop} value={crop}>{crop} (Recommended)</option>)}
+                  </select>
+                  <p className="mt-1.5 text-[10px] text-muted-foreground">
+                    Selecting a companion crop will generate a unified intercropping plan with mixed tasks.
+                  </p>
+                </div>
+              )}
               <div className="rounded-lg bg-secondary/30 p-3 text-sm">
                 <div className="flex justify-between border-b border-border/50 pb-2 mb-2">
                   <span className="text-muted-foreground">Farm</span>

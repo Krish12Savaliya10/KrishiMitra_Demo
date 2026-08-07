@@ -277,6 +277,29 @@ class CropPlanViewSet(OwnerViewSet):
             return Response(['Wheat', 'Cotton', 'Soybean',
                             'Groundnut', 'Onion', 'Tomato'])
 
+    @action(detail=False,
+            methods=['get'],
+            url_path='companion-suggestions',
+            permission_classes=[permissions.AllowAny])
+    def companion_suggestions(self, request):
+        crop = request.query_params.get('crop', '').strip().lower()
+        
+        # Intercropping Compatibility Matrix
+        matrix = {
+            'wheat': ['Mustard', 'Chickpea', 'Linseed'],
+            'cotton': ['Pigeon Pea', 'Cowpea', 'Soybean'],
+            'soybean': ['Maize', 'Pigeon Pea', 'Sorghum'],
+            'groundnut': ['Sunflower', 'Pearl Millet'],
+            'tomato': ['Marigold', 'Basil', 'Onion'],
+            'onion': ['Tomato', 'Cabbage', 'Carrot'],
+            'maize': ['Soybean', 'Cowpea', 'Pumpkin']
+        }
+        
+        if crop in matrix:
+            return Response(matrix[crop])
+        
+        # Fallback to generic beneficial cover crops for unmapped crops
+        return Response(['Clover', 'Alfalfa', 'Cowpea'])
 
 class MarketPriceViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MarketPrice.objects.all()

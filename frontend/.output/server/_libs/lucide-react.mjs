@@ -489,6 +489,28 @@ var CircleAlert = createLucideIcon("circle-alert", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var CircleArrowRight = createLucideIcon("circle-arrow-right", [
+	["circle", {
+		cx: "12",
+		cy: "12",
+		r: "10",
+		key: "1mglay"
+	}],
+	["path", {
+		d: "m12 16 4-4-4-4",
+		key: "1i9zcv"
+	}],
+	["path", {
+		d: "M8 12h8",
+		key: "1wcyev"
+	}]
+]);
+/**
+* @license lucide-react v0.575.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var CircleCheck = createLucideIcon("circle-check", [["circle", {
 	cx: "12",
 	cy: "12",
@@ -2004,4 +2026,4 @@ var X = createLucideIcon("x", [["path", {
 	key: "d8bk6v"
 }]]);
 //#endregion
-export { Image as $, Ruler as A, CalendarClock as At, MessageSquareText as B, Settings as C, ChevronDown as Ct, Scale as D, ChartColumn as Dt, Search as E, ChartLine as Et, Phone as F, Award as Ft, LogOut as G, MapPinned as H, Pencil as I, ArrowUpRight as It, ListTodo as J, Lock as K, Navigation as L, ArrowRight as Lt, RotateCcw as M, Brain as Mt, RefreshCw as N, Bell as Nt, Save as O, Calendar as Ot, Plus as P, BellRing as Pt, Info as Q, Moon as R, Activity as Rt, ShieldAlert as S, ChevronRight as St, Send as T, CheckCheck as Tt, MapPin as U, Menu as V, Mail as W, Leaf as X, ListChecks as Y, LayoutDashboard as Z, Sprout as _, Clock as _t, UserRound as a, Eye as at, Shield as b, CircleCheck as bt, Timer as c, Droplets as ct, Thermometer as d, Crosshair as dt, ImagePlus as et, ThermometerSun as f, Cpu as ft, Square as g, CloudRain as gt, Store as h, CloudSun as ht, User as i, Flag as it, Route as j, CalendarCheck as jt, Satellite as k, CalendarRange as kt, ThumbsUp as l, Droplet as lt, Sun as m, Cloud as mt, Wind as n, Funnel as nt, TriangleAlert as o, EyeOff as ot, Target as p, Copy as pt, LoaderCircle as q, Wallet as r, FlaskConical as rt, TrendingUp as s, ExternalLink as st, X as t, Gauge as tt, ThumbsDown as u, Crown as ut, Sparkles as v, ClipboardPaste as vt, Settings2 as w, Check as wt, ShieldCheck as x, CircleAlert as xt, SkipForward as y, ClipboardList as yt, Microscope as z };
+export { Image as $, Ruler as A, CalendarRange as At, MessageSquareText as B, Settings as C, ChevronRight as Ct, Scale as D, ChartLine as Dt, Search as E, CheckCheck as Et, Phone as F, BellRing as Ft, LogOut as G, MapPinned as H, Pencil as I, Award as It, ListTodo as J, Lock as K, Navigation as L, ArrowUpRight as Lt, RotateCcw as M, CalendarCheck as Mt, RefreshCw as N, Brain as Nt, Save as O, ChartColumn as Ot, Plus as P, Bell as Pt, Info as Q, Moon as R, ArrowRight as Rt, ShieldAlert as S, CircleAlert as St, Send as T, Check as Tt, MapPin as U, Menu as V, Mail as W, Leaf as X, ListChecks as Y, LayoutDashboard as Z, Sprout as _, Clock as _t, UserRound as a, Eye as at, Shield as b, CircleCheck as bt, Timer as c, Droplets as ct, Thermometer as d, Crosshair as dt, ImagePlus as et, ThermometerSun as f, Cpu as ft, Square as g, CloudRain as gt, Store as h, CloudSun as ht, User as i, Flag as it, Route as j, CalendarClock as jt, Satellite as k, Calendar as kt, ThumbsUp as l, Droplet as lt, Sun as m, Cloud as mt, Wind as n, Funnel as nt, TriangleAlert as o, EyeOff as ot, Target as p, Copy as pt, LoaderCircle as q, Wallet as r, FlaskConical as rt, TrendingUp as s, ExternalLink as st, X as t, Gauge as tt, ThumbsDown as u, Crown as ut, Sparkles as v, ClipboardPaste as vt, Settings2 as w, ChevronDown as wt, ShieldCheck as x, CircleArrowRight as xt, SkipForward as y, ClipboardList as yt, Microscope as z, Activity as zt };
