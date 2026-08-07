@@ -64,6 +64,19 @@ def auth_register(request):
     if not email or not password:
         return Response(
             {'message': 'Email and password are required.'}, status=400)
+            
+    otp_code = data.get('otp', '').strip()
+    if not otp_code:
+        return Response({'message': 'OTP is required for registration.'}, status=400)
+        
+    from .models import AuthOTP
+    otp_record = AuthOTP.objects.filter(email=email).last()
+    
+    if not otp_record or not otp_record.is_valid():
+        return Response({'message': 'OTP has expired or does not exist.'}, status=400)
+        
+    if otp_record.otp != otp_code:
+        return Response({'message': 'Invalid OTP.'}, status=400)
 
     if User.objects.filter(email=email).exists():
         return Response(
@@ -92,6 +105,7 @@ def auth_register(request):
 
     token = get_tokens_for_user(user)
     serializer = UserSerializer(user)
+    otp_record.delete()
     return Response({'token': token, 'user': serializer.data}, status=201)
 
 
@@ -253,6 +267,22 @@ def auth_verify_otp(request):
         'token': str(refresh.access_token),
         'user': UserSerializer(user).data
     })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def auth_check_exists(request):
+    from django.db.models import Q
+    email = request.data.get('email')
+    phone = request.data.get('phone')
+    
+    if email and User.objects.filter(email=email).exists():
+        return Response({'message': 'An account with this email already exists.', 'field': 'email'}, status=400)
+        
+    if phone and User.objects.filter(phone=phone).exists():
+        return Response({'message': 'An account with this phone number already exists.', 'field': 'phone'}, status=400)
+        
+    return Response({'message': 'Available'})
 
 
 @api_view(['POST'])

@@ -1,0 +1,1 @@
+import{a as e}from"./AppDataContext-TGNyweVZ.js";import{t}from"./AppShell-BGe1PKD2.js";import{i as n}from"./index-wNFy-9SK.js";var r=e();function i(){return(0,r.jsx)(t,{children:(0,r.jsx)(n,{})})}export{i as component};

@@ -58,6 +58,7 @@ function AuthPage() {
   const [forgotPasswordOTP, setForgotPasswordOTP] = useState("");
   const [forgotPasswordNew, setForgotPasswordNew] = useState("");
   const [forgotError, setForgotError] = useState("");
+  const [registerOtp, setRegisterOtp] = useState("");
 
   const [otpLoginStep, setOtpLoginStep] = useState("email");
   const [otpLoginEmail, setOtpLoginEmail] = useState("");
@@ -188,37 +189,78 @@ function AuthPage() {
 
     if (step === 1) {
       if (!validateStep1()) return;
-      setStep(2);
+      try {
+        const res = await fetch(`${API_URL}/auth/check-exists`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: formData.email, phone: formData.phone }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (data.field) {
+            setErrors(prev => ({ ...prev, [data.field]: data.message }));
+          } else {
+            setApiError(data.message || "An account with this email/phone already exists.");
+          }
+          return;
+        }
+        setStep(2);
+      } catch (err) {
+        setApiError("Failed to check if account exists. Please try again.");
+      }
       return;
     }
 
-    // Final Step
-    if (!validateStep2()) return;
+    // Step 2 -> Request OTP
+    if (step === 2) {
+      if (!validateStep2()) return;
+      try {
+        const res = await fetch(`${API_URL}/auth/otp/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: formData.email }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Failed to send OTP");
+        setStep(3);
+      } catch (err) {
+        setApiError(err.message);
+      }
+      return;
+    }
 
-    try {
-      const payload = {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        phone: formData.phone || Math.random().toString().slice(2, 12),
-        email: formData.email,
-        password: formData.password,
-        role: formData.role,
-        location: formData.location || "Pune, Maharashtra",
-        waterResources: formData.waterResources.length > 0 ? formData.waterResources : ["Borewell"],
-      };
+    // Step 3 -> Verify OTP & Register
+    if (step === 3) {
+      if (!registerOtp) {
+        setApiError("Please enter the 6-digit OTP.");
+        return;
+      }
+      try {
+        const payload = {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phone || Math.random().toString().slice(2, 12),
+          email: formData.email,
+          password: formData.password,
+          role: formData.role,
+          location: formData.location || "Pune, Maharashtra",
+          waterResources: formData.waterResources.length > 0 ? formData.waterResources : ["Borewell"],
+          otp: registerOtp,
+        };
 
-      const res = await fetch(`${API_URL}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Registration failed");
+        const res = await fetch(`${API_URL}/auth/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Registration failed");
 
-      login(data.token);
-      navigate({ to: "/farms" });
-    } catch (err) {
-      setApiError(err.message);
+        login(data.token);
+        navigate({ to: "/farms" });
+      } catch (err) {
+        setApiError(err.message);
+      }
     }
   };
 
@@ -554,6 +596,32 @@ function AuthPage() {
         </div>
       );
     }
+    
+    if (step === 3) {
+      return (
+        <div className="animate-fade-up space-y-4">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4">
+            <div className="flex items-center gap-2 text-primary font-semibold mb-1">
+              <Mail className="h-4 w-4" /> Verify your email
+            </div>
+            <p className="text-xs text-muted-foreground">
+              We've sent a 6-digit code to <strong>{formData.email}</strong>.
+            </p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-foreground">Enter OTP</label>
+            <input
+              type="text"
+              maxLength={6}
+              value={registerOtp}
+              onChange={(e) => { setRegisterOtp(e.target.value); setApiError(""); }}
+              placeholder="123456"
+              className="w-full rounded-xl border border-input bg-background/50 px-3.5 py-3 text-sm text-foreground outline-none tracking-widest focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+        </div>
+      );
+    }
   };
 
   return (
@@ -610,7 +678,7 @@ function AuthPage() {
                 </div>
               ) : (
                 <div className="mt-6 flex items-center gap-2 mb-2">
-                  {[1, 2].map((s) => (
+                  {[1, 2, 3].map((s) => (
                     <div key={s} className={`h-1.5 rounded-full flex-1 transition-all ${step >= s ? "bg-primary" : "bg-primary/20"}`} />
                   ))}
                 </div>
@@ -631,7 +699,7 @@ function AuthPage() {
                     type="submit"
                     className="group flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 mt-6 text-sm font-bold text-primary-foreground shadow-[0_0_28px_-8px_var(--color-primary)] transition-transform hover:scale-[1.02]"
                   >
-                    {mode === "login" ? "Sign in to dashboard" : step < 2 ? "Continue" : "Complete Registration"}
+                    {mode === "login" ? "Sign in to dashboard" : step < 3 ? "Continue" : "Complete Registration"}
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                   </button>
                 </form>

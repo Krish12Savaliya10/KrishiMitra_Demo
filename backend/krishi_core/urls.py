@@ -23,6 +23,7 @@ urlpatterns = [
     path('auth/login', views.auth_login, name='auth_login'),
     path('auth/me', views.auth_me, name='auth_me'),
     path('auth/profile', views.auth_update_profile, name='auth_update_profile'),
+    path('auth/check-exists', views.auth_check_exists, name='auth_check_exists'),
     path('auth/change-password', views.auth_change_password, name='auth_change_password'),
     path('auth/forgot-password', views.auth_forgot_password, name='auth_forgot_password'),
     path('auth/reset-password', views.auth_reset_password, name='auth_reset_password'),

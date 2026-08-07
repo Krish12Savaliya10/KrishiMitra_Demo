@@ -23,7 +23,6 @@ import { Route as AppMarketRouteImport } from './routes/_app.market'
 import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppRecommendationsRouteImport } from './routes/_app.recommendations'
-import { Route as AppScheduleRouteImport } from './routes/_app.schedule'
 import { Route as AppWeatherRouteImport } from './routes/_app.weather'
 
 const IndexRoute = IndexRouteImport.update({
@@ -95,11 +94,6 @@ const AppRecommendationsRoute = AppRecommendationsRouteImport.update({
   path: '/recommendations',
   getParentRoute: () => AppRoute,
 } as any)
-const AppScheduleRoute = AppScheduleRouteImport.update({
-  id: '/schedule',
-  path: '/schedule',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppWeatherRoute = AppWeatherRouteImport.update({
   id: '/weather',
   path: '/weather',
@@ -120,7 +114,6 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof AppNotificationsRoute
   '/profile': typeof AppProfileRoute
   '/recommendations': typeof AppRecommendationsRoute
-  '/schedule': typeof AppScheduleRoute
   '/weather': typeof AppWeatherRoute
 }
 export interface FileRoutesByTo {
@@ -137,7 +130,6 @@ export interface FileRoutesByTo {
   '/notifications': typeof AppNotificationsRoute
   '/profile': typeof AppProfileRoute
   '/recommendations': typeof AppRecommendationsRoute
-  '/schedule': typeof AppScheduleRoute
   '/weather': typeof AppWeatherRoute
 }
 export interface FileRoutesById {
@@ -156,7 +148,6 @@ export interface FileRoutesById {
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/recommendations': typeof AppRecommendationsRoute
-  '/_app/schedule': typeof AppScheduleRoute
   '/_app/weather': typeof AppWeatherRoute
 }
 export interface FileRouteTypes {
@@ -175,7 +166,6 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/profile'
     | '/recommendations'
-    | '/schedule'
     | '/weather'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -192,7 +182,6 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/profile'
     | '/recommendations'
-    | '/schedule'
     | '/weather'
   id:
     | '__root__'
@@ -210,7 +199,6 @@ export interface FileRouteTypes {
     | '/_app/notifications'
     | '/_app/profile'
     | '/_app/recommendations'
-    | '/_app/schedule'
     | '/_app/weather'
   fileRoutesById: FileRoutesById
 }
@@ -321,13 +309,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRecommendationsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/schedule': {
-      id: '/_app/schedule'
-      path: '/schedule'
-      fullPath: '/schedule'
-      preLoaderRoute: typeof AppScheduleRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/weather': {
       id: '/_app/weather'
       path: '/weather'
@@ -349,7 +330,6 @@ interface AppRouteChildren {
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppProfileRoute: typeof AppProfileRoute
   AppRecommendationsRoute: typeof AppRecommendationsRoute
-  AppScheduleRoute: typeof AppScheduleRoute
   AppWeatherRoute: typeof AppWeatherRoute
 }
 
@@ -364,7 +344,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppNotificationsRoute: AppNotificationsRoute,
   AppProfileRoute: AppProfileRoute,
   AppRecommendationsRoute: AppRecommendationsRoute,
-  AppScheduleRoute: AppScheduleRoute,
   AppWeatherRoute: AppWeatherRoute,
 }
 
