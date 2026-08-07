@@ -836,11 +836,11 @@ def daily_tasks(request):
 
     try:
         farm = Farm.objects.get(id=farm_id, owner=request.user)
-        plan = CropPlan.objects.filter(farm=farm, status="active").first()
+        active_plans = CropPlan.objects.filter(farm=farm, status="active")
     except Farm.DoesNotExist:
         return Response({"error": "Farm not found"}, status=404)
 
-    if not plan:
+    if not active_plans.exists():
         return Response(
             {"error": "No active crop plan found for this field."}, status=404)
 
@@ -850,16 +850,17 @@ def daily_tasks(request):
     # --- JIT Generation ---
     from .services.schedule_engine import generate_schedule_for_crop_plan
     
-    # Calculate elapsed days since sowing
-    sowing_date = plan.sowingDate.date() if hasattr(plan.sowingDate, 'date') else plan.sowingDate
-    elapsed_days = max(0, (target_date - sowing_date).days)
-    
-    # Generate tasks for today and the next 3 days dynamically (Rolling Window)
-    try:
-        generate_schedule_for_crop_plan(plan, start_day=max(0, elapsed_days - 1), end_day=elapsed_days + 3)
-    except Exception as e:
-        import logging
-        logging.getLogger("krishi_core").error("JIT schedule generation failed: %s", e)
+    for plan in active_plans:
+        # Calculate elapsed days since sowing
+        sowing_date = plan.sowingDate.date() if hasattr(plan.sowingDate, 'date') else plan.sowingDate
+        elapsed_days = max(0, (target_date - sowing_date).days)
+        
+        # Generate tasks for today and the next 3 days dynamically (Rolling Window)
+        try:
+            generate_schedule_for_crop_plan(plan, start_day=max(0, elapsed_days - 1), end_day=elapsed_days + 3)
+        except Exception as e:
+            import logging
+            logging.getLogger("krishi_core").error("JIT schedule generation failed for plan %s: %s", plan.id, e)
     # ----------------------
 
     # 1. Fetch weather
@@ -870,40 +871,40 @@ def daily_tasks(request):
     humidity = weather.get("current", {}).get("humidity", 0)
 
     # 2. Rule Engine Application
+    for plan in active_plans:
+        # Rule 2: Overdue Check (Irrigation / Fertilizer)
+        overdue_threshold = timezone.now() - timedelta(days=3)
+        overdue_tasks = ScheduleTask.objects.filter(
+            cropPlan=plan,
+            status="pending",
+            date__lt=overdue_threshold,
+            category__in=["irrigation", "fertilizer"]
+        )
 
-    # Rule 2: Overdue Check (Irrigation / Fertilizer)
-    overdue_threshold = timezone.now() - timedelta(days=3)
-    overdue_tasks = ScheduleTask.objects.filter(
-        cropPlan=plan,
-        status="pending",
-        date__lt=overdue_threshold,
-        category__in=["irrigation", "fertilizer"]
-    )
+        if overdue_tasks.exists():
+            # Shift everything in this stage
+            gap = 3  # Shift by 3 days for simplicity
+            plan.driftDays += gap
+            plan.save()
 
-    if overdue_tasks.exists():
-        # Shift everything in this stage
-        gap = 3  # Shift by 3 days for simplicity
-        plan.driftDays += gap
-        plan.save()
+            for t in overdue_tasks:
+                # Generate RAG explanation
+                reason = "Task was severely overdue, shifting downstream schedule."
+                t.status = "delayed"
+                t.reason = reason
+                t.save()
 
-        for t in overdue_tasks:
-            # Generate RAG explanation
-            reason = "Task was severely overdue, shifting downstream schedule."
-            t.status = "delayed"
-            t.reason = reason
-            t.save()
-
-            # Shift downstream
-            downstream = ScheduleTask.objects.filter(
-                cropPlan=plan, status="pending", date__gte=t.date
-            )
-            for dt in downstream:
-                dt.date = dt.date + timedelta(days=gap)
-                dt.save()
+                # Shift downstream
+                downstream = ScheduleTask.objects.filter(
+                    cropPlan=plan, status="pending", date__gte=t.date
+                )
+                for dt in downstream:
+                    dt.date = dt.date + timedelta(days=gap)
+                    dt.save()
 
     # Rule 1 & 3: Daily specific adjustments
     tasks_today = ScheduleTask.objects.filter(
-        cropPlan=plan,
+        cropPlan__in=active_plans,
         date__date__lte=target_date,
         status="pending"
     )
@@ -925,26 +926,23 @@ def daily_tasks(request):
                 adjusted = True
 
         if adjusted:
-            # We can use ML LLM to generate reason via ChromaDB, but doing it synchronously here is slow.
-            # So we just assign the hardcoded rule reason. The user said:
-            # "having the LLM explain the adjustment in farmer-friendly language".
-            # For MVP, we simulate the LLM explanation to avoid huge latency
-            # during the list fetch.
             if not t.reason.startswith("AI:"):
                 t.reason = "AI: " + t.reason
             t.save()
 
     # Refetch today's active tasks to return
     tasks_to_return = ScheduleTask.objects.filter(
-        cropPlan=plan,
+        cropPlan__in=active_plans,
         date__date__lte=target_date,
         status__in=["pending", "delayed"]
     )
 
     serializer = ScheduleTaskSerializer(tasks_to_return, many=True)
+    # Sum driftDays across all plans for simplicity (or send dict mapping plan ID to driftDays)
+    total_drift = sum(p.driftDays for p in active_plans)
     return Response({"tasks": serializer.data,
                      "weather": weather,
-                     "driftDays": plan.driftDays})
+                     "driftDays": total_drift})
 
 
 @api_view(['POST'])
