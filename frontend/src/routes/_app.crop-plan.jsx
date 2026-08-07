@@ -10,12 +10,8 @@ import { subscribeAiSyncRefresh } from "@/lib/aiSyncEvents";
 
 import { CurrentStageCard } from "@/components/crop-plan/CurrentStageCard";
 import { PlanSummaryCard } from "@/components/crop-plan/PlanSummaryCard";
-import { AiFarmAdvisor } from "@/components/crop-plan/AiFarmAdvisor";
-import { WeatherCard } from "@/components/crop-plan/WeatherCard";
-import { SoilHealthCard } from "@/components/crop-plan/SoilHealthCard";
-import { ProgressMetrics } from "@/components/crop-plan/ProgressMetrics";
 import { VerticalTimeline } from "@/components/crop-plan/VerticalTimeline";
-import { NextTaskCard } from "@/components/crop-plan/NextTaskCard";
+
 
 const API_URL = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api");
 
@@ -140,12 +136,19 @@ function CropPlanPage() {
   const [isDropping, setIsDropping] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState(null);
 
+  const availableArea = useMemo(() => {
+    if (!activeFarm) return 0;
+    const activePlans = cropPlans.filter(p => p.status === "active");
+    const usedArea = activePlans.reduce((sum, p) => sum + (p.areaAcres || 0), 0);
+    return Math.max(0, activeFarm.areaAcres - usedArea);
+  }, [activeFarm, cropPlans]);
+
   useEffect(() => {
     if (search.crop) {
-      setAiForm(prev => ({ ...prev, cropName: search.crop }));
+      setAiForm(prev => ({ ...prev, cropName: search.crop, areaAcres: availableArea }));
       setIsAiModalOpen(true);
     }
-  }, [search.crop]);
+  }, [search.crop, availableArea]);
 
   useEffect(() => {
     fetch(`${API_URL}/crop-plans/supported-crops`)
@@ -167,6 +170,11 @@ function CropPlanPage() {
 
   const handleAiSubmit = async (e) => {
     e.preventDefault();
+    if (aiForm.areaAcres <= 0 || aiForm.areaAcres > availableArea) {
+      toast.error(`Invalid area. You have ${availableArea} acres available.`);
+      return;
+    }
+
     const month = new Date().getMonth();
     const year = new Date().getFullYear();
     let computedSeason = "Zaid";
@@ -174,7 +182,7 @@ function CropPlanPage() {
     else if (month >= 10 || month <= 2) computedSeason = "Rabi";
     computedSeason = `${computedSeason} ${year}`;
     
-    const area = activeFarm?.areaAcres || 1;
+    const area = aiForm.areaAcres;
     const irrigation = activeFarm?.waterResources?.length > 0 ? activeFarm.waterResources.join(', ') : "Rainfed";
     
     let prompt = `@cropPlan Generate a crop plan. Crop: ${aiForm.cropName}`;
@@ -508,21 +516,7 @@ function CropPlanPage() {
         action={
           <div className="flex items-center gap-2">
             <FarmSwitcher />
-            <button
-              onClick={() => navigate({ to: "/schedule" })}
-              className="flex items-center gap-1.5 rounded-xl bg-secondary px-4 py-2 text-xs font-semibold text-secondary-foreground transition-transform hover:scale-[1.03]"
-            >
-              <CalendarRange className="h-3.5 w-3.5" /> View Schedule
-            </button>
-            {activePlan && (
-              <button
-                onClick={() => setIsMidwayModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl border border-border bg-secondary/30 px-4 py-2 text-xs font-semibold transition-colors hover:bg-secondary"
-                title="Crop already partway grown? Start daily tasks from today instead of from the sowing date."
-              >
-                <Flag className="h-3.5 w-3.5" /> Start Daily Tasks From Here
-              </button>
-            )}
+
             {activePlan && (
               <button
                 onClick={handleDropPlan}
@@ -637,12 +631,12 @@ function CropPlanPage() {
               )}
               <div className="rounded-lg bg-secondary/30 p-3 text-sm">
                 <div className="flex justify-between border-b border-border/50 pb-2 mb-2">
-                  <span className="text-muted-foreground">Farm</span>
-                  <span className="font-medium">{activeFarm?.name || "Home Farm"}</span>
+                  <span className="text-muted-foreground">Farm Total Area</span>
+                  <span className="font-medium">{activeFarm?.areaAcres || 1} acres</span>
                 </div>
                 <div className="flex justify-between border-b border-border/50 pb-2 mb-2">
-                  <span className="text-muted-foreground">Area</span>
-                  <span className="font-medium">{activeFarm?.areaAcres || 1} acres</span>
+                  <span className="text-muted-foreground">Available Area</span>
+                  <span className="font-medium text-primary">{availableArea} acres</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Water Source</span>
@@ -651,6 +645,20 @@ function CropPlanPage() {
                   </span>
                 </div>
               </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Area for this Crop (Acres)</label>
+                <input 
+                  type="number" 
+                  step="0.1" 
+                  max={availableArea} 
+                  required 
+                  value={aiForm.areaAcres || ""} 
+                  onChange={e => setAiForm({...aiForm, areaAcres: parseFloat(e.target.value)})} 
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none" 
+                />
+              </div>
+
               <div className="mt-6 flex justify-end gap-3">
                 <button type="button" onClick={() => setIsAiModalOpen(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary" disabled={isGenerating}>Cancel</button>
                 <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-md hover:opacity-90 disabled:opacity-50" disabled={isGenerating}>
@@ -743,29 +751,18 @@ function CropPlanPage() {
       {activePlan && (
         <div className="space-y-6 mb-6">
           
-          <ProgressMetrics 
-            tasksDone={planTasks.filter(t => t.status === "done").length}
-            todayTasks={planTasks.filter(t => new Date(t.date).toDateString() === new Date().toDateString()).length}
-            upcomingTasks={planTasks.filter(t => t.status !== "done" && new Date(t.date) > new Date()).length}
-            seasonProgress={seasonProgress}
-          />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-            <CurrentStageCard 
-              activeStage={activeStage} 
-              currentDay={currentDay} 
-              durationDays={durationDays} 
-              stageProgress={stageProgress} 
-              harvestDate={harvestDate} 
-            />
-            <NextTaskCard planTasks={planTasks} />
-            <AiFarmAdvisor cropName={activePlan.cropName} />
-            <WeatherCard />
-          </div>
-          
+
           <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
             <div className="xl:col-span-3">
-              <div className="glass rounded-2xl p-6 shadow-sm">
+              <CurrentStageCard 
+                activeStage={activeStage} 
+                currentDay={currentDay} 
+                durationDays={durationDays} 
+                stageProgress={stageProgress} 
+                harvestDate={harvestDate} 
+              />
+              <div className="glass mt-6 rounded-2xl p-6 shadow-sm">
                 <h2 className="mb-6 font-display text-lg font-bold text-foreground">
                   Growth Stage Roadmap
                 </h2>
@@ -780,12 +777,12 @@ function CropPlanPage() {
             </div>
             
             <div className="xl:col-span-1 flex flex-col gap-6">
-              <PlanSummaryCard 
-                activePlan={activePlan} 
-                durationDays={durationDays} 
-                harvestDate={harvestDate} 
+              <PlanSummaryCard
+                activePlan={activePlan}
+                durationDays={durationDays}
+                harvestDate={harvestDate}
+                farmName={activeFarm?.name}
               />
-              <SoilHealthCard />
             </div>
           </div>
         </div>

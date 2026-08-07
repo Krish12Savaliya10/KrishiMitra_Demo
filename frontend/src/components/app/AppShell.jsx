@@ -41,9 +41,16 @@ export function ThemeToggle() {
 }
 
 const nav = [
+  { label: "AI Mitra", to: "/ai-saathi", icon: MessageSquareText, badge: null, highlight: true },
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
+  { label: "Farms", to: "/farms", icon: MapPinned },
+  { label: "Recommendations", to: "/recommendations", icon: Sprout },
+  { label: "Crop Plan", to: "/crop-plan", icon: RouteIcon },
   { label: "Weather & Advisory", to: "/weather", icon: CloudSun },
   { label: "Market Prices", to: "/market", icon: LineChart },
+  { label: "Risk Alerts", to: "/alerts", icon: ShieldAlert, dynamicBadge: "alerts" },
+  { label: "Expenses", to: "/expenses", icon: Wallet },
+  { label: "Notifications", to: "/notifications", icon: Bell, dynamicBadge: "notifications" },
 ];
 
 const secondaryNav = [
@@ -142,6 +149,25 @@ function SidebarContent({ onNavigate }) {
           <BrandMark />
         </Link>
       </div>
+
+      {farms.length > 1 && (
+        <div className="mx-4 mb-3">
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Active Farm
+          </label>
+          <select
+            value={activeFarmId || ""}
+            onChange={(e) => setActiveFarmId(e.target.value)}
+            className="w-full rounded-lg border border-border bg-secondary/50 px-2.5 py-1.5 text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            {farms.map((f) => (
+              <option key={f._id} value={f._id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
         <div className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">

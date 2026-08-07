@@ -10,13 +10,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
 from .models import (
-    User, Farm, CropPlan, MarketPrice, ScheduleTask,
+    User, Farm, CropPlan, MarketPrice, 
     Recommendation, Alert, Expense, Notification,
     WeatherCache, ChatMessage
 )
 from .serializers import (
     UserSerializer, FarmSerializer, CropPlanSerializer,
-    MarketPriceSerializer, ScheduleTaskSerializer,
+    MarketPriceSerializer, 
     RecommendationSerializer, AlertSerializer,
     ExpenseSerializer, NotificationSerializer,
     WeatherCacheSerializer, ChatMessageSerializer
@@ -212,13 +212,41 @@ def auth_request_otp(request):
         expires_at=timezone.now() + timedelta(minutes=15)
     )
     
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+        <div style="background-color: #10b981; padding: 24px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">KrishiMitra</h1>
+        </div>
+        <div style="padding: 32px 24px; background-color: #ffffff;">
+            <h2 style="color: #111827; font-size: 20px; margin-top: 0;">Verify your email address</h2>
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
+                Hello, <br/><br/>
+                Please use the following One-Time Password (OTP) to verify your email address and securely log in to your KrishiMitra account.
+            </p>
+            <div style="background-color: #f3f4f6; border-radius: 8px; padding: 16px; text-align: center; margin: 24px 0;">
+                <span style="font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #111827;">{otp_code}</span>
+            </div>
+            <p style="color: #6b7280; font-size: 14px; margin-bottom: 0;">
+                This code will expire in 15 minutes. If you did not request this, please ignore this email.
+            </p>
+        </div>
+        <div style="background-color: #f9fafb; padding: 16px 24px; text-align: center; border-top: 1px solid #e5e7eb;">
+            <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                &copy; {timezone.now().year} KrishiMitra. All rights reserved.<br/>
+                Empowering farmers with AI-driven insights.
+            </p>
+        </div>
+    </div>
+    """
+    
     try:
         send_mail(
-            'KrishiMitra - Login OTP',
+            'KrishiMitra - Your Verification Code',
             f'Your login OTP is: {otp_code}. It will expire in 15 minutes.',
             getattr(settings, 'EMAIL_HOST_USER', 'noreply@krishimitra.com'),
             [email],
             fail_silently=False,
+            html_message=html_content
         )
     except Exception as e:
         import logging
@@ -311,12 +339,34 @@ def auth_forgot_password(request):
         
         # Send email
         try:
+            html_content = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+                <div style="background-color: #10b981; padding: 24px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 24px;">KrishiMitra</h1>
+                </div>
+                <div style="padding: 32px 24px; background-color: #ffffff;">
+                    <h2 style="color: #111827; font-size: 20px; margin-top: 0;">Password Reset Request</h2>
+                    <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
+                        Hello, <br/><br/>
+                        We received a request to reset your KrishiMitra password. Use the following One-Time Password (OTP) to proceed.
+                    </p>
+                    <div style="background-color: #f3f4f6; border-radius: 8px; padding: 16px; text-align: center; margin: 24px 0;">
+                        <span style="font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #111827;">{otp_code}</span>
+                    </div>
+                    <p style="color: #6b7280; font-size: 14px; margin-bottom: 0;">
+                        This code will expire in 15 minutes. If you did not request this, please safely ignore this email.
+                    </p>
+                </div>
+            </div>
+            """
+            
             send_mail(
                 'KrishiMitra - Password Reset OTP',
                 f'Your password reset OTP is: {otp_code}. It will expire in 15 minutes.',
                 getattr(settings, 'EMAIL_HOST_USER', 'noreply@krishimitra.com'),
                 [email],
                 fail_silently=False,
+                html_message=html_content
             )
         except Exception as e:
             import logging
@@ -385,7 +435,7 @@ class CropPlanViewSet(OwnerViewSet):
         if not self.request.user or self.request.user.is_anonymous:
             qs = CropPlan.objects.none()
         else:
-            qs = super().get_queryset().prefetch_related('schedule_tasks')
+            qs = super().get_queryset()
         farm_id = self.request.query_params.get('farm')
         if farm_id:
             qs = qs.filter(farm_id=farm_id)
@@ -393,13 +443,8 @@ class CropPlanViewSet(OwnerViewSet):
 
     def perform_create(self, serializer):
         plan = serializer.save(owner=self.request.user)
-        try:
-            from .services.schedule_engine import generate_schedule_for_crop_plan
-            # Only generate the first 3 days of tasks on plan creation
-            generate_schedule_for_crop_plan(plan, start_day=0, end_day=3)
-        except Exception as e:
-            import logging
-            logging.getLogger("krishi_core").error("Failed to generate schedule: %s", e) 
+        # Note: We now only generate crop plan timelines via /api/recommendations 
+        # and do not pre-generate daily schedules automatically here.
 
     @action(detail=True, methods=['post'], url_path='drop')
     def drop_plan(self, request, pk=None):
@@ -407,45 +452,7 @@ class CropPlanViewSet(OwnerViewSet):
         plan.delete()
         return Response({'message': 'Plan dropped', 'tasksRemoved': 0})
 
-    @action(detail=True, methods=['post'], url_path='start-daily-schedule')
-    def start_daily_schedule(self, request, pk=None):
-        self.get_object()
-        # Optionally handle startOver and scheduleDate from request.data
-        return Response({'message': 'Daily schedule started'})
 
-    @action(detail=True, methods=['post'], url_path='shift-today')
-    def shift_today(self, request, pk=None):
-        from datetime import timedelta
-        plan = self.get_object()
-        
-        # 1. Push all pending tasks currently in the DB forward by 1 day
-        from .models import ScheduleTask
-        tasks = ScheduleTask.objects.filter(cropPlan=plan, status__in=["pending", "delayed"])
-        for t in tasks:
-            t.date = t.date + timedelta(days=1)
-            t.save()
-            
-        # 2. Shift the sowingDate forward by 1 day so future JIT tasks also shift
-        plan.sowingDate = plan.sowingDate + timedelta(days=1)
-        plan.expectedHarvestDate = plan.expectedHarvestDate + timedelta(days=1)
-        plan.driftDays += 1
-        
-        # 3. Shift milestones
-        if isinstance(plan.milestones, list):
-            from datetime import datetime
-            updated = []
-            for m in plan.milestones:
-                if m.get('status') == 'pending' and m.get('plannedDate'):
-                    try:
-                        orig = datetime.fromisoformat(m['plannedDate'])
-                        m['plannedDate'] = (orig + timedelta(days=1)).isoformat()
-                    except:
-                        pass
-                updated.append(m)
-            plan.milestones = updated
-            
-        plan.save()
-        return Response({'message': 'Schedule shifted successfully'})
 
     @action(detail=False,
             methods=['get'],
@@ -548,54 +555,7 @@ def market_locations(request):
                      'districts': districts})
 
 
-class ScheduleTaskViewSet(OwnerViewSet):
-    queryset = ScheduleTask.objects.all()
-    serializer_class = ScheduleTaskSerializer
 
-    def get_queryset(self):
-        qs = super().get_queryset()
-        farm_id = self.request.query_params.get('farm')
-        if farm_id:
-            qs = qs.filter(farm_id=farm_id)
-        return qs.order_by('date')
-
-    @action(detail=False, methods=['post'], url_path='shift-today')
-    def shift_today(self, request):
-        farm_id = request.headers.get('Farm-Id') or request.data.get('farm_id') or request.data.get('farm')
-        if not farm_id:
-            return Response({'error': 'Farm ID required'}, status=400)
-            
-        from .models import CropPlan
-        plan = CropPlan.objects.filter(farm_id=farm_id, status='active', owner=request.user).first()
-        if not plan:
-            return Response({'error': 'No active crop plan'}, status=404)
-            
-        from datetime import timedelta
-        from .models import ScheduleTask
-        tasks = ScheduleTask.objects.filter(cropPlan=plan, status__in=["pending", "delayed"])
-        for t in tasks:
-            t.date = t.date + timedelta(days=1)
-            t.save()
-            
-        plan.sowingDate = plan.sowingDate + timedelta(days=1)
-        plan.expectedHarvestDate = plan.expectedHarvestDate + timedelta(days=1)
-        plan.driftDays += 1
-        
-        if isinstance(plan.milestones, list):
-            from datetime import datetime
-            updated = []
-            for m in plan.milestones:
-                if m.get('status') == 'pending' and m.get('plannedDate'):
-                    try:
-                        orig = datetime.fromisoformat(m['plannedDate'])
-                        m['plannedDate'] = (orig + timedelta(days=1)).isoformat()
-                    except:
-                        pass
-                updated.append(m)
-            plan.milestones = updated
-            
-        plan.save()
-        return Response({'message': 'Schedule shifted successfully'})
 
 
 class RecommendationViewSet(OwnerViewSet):
@@ -672,23 +632,7 @@ def chat_stream(request):
         except Exception:
             pass
 
-    # Inject Field History Context if provided
-    if field_id:
-        try:
-            from .models import ScheduleTask
-            recent_tasks = ScheduleTask.objects.filter(
-                farm_id=field_id, owner=request.user).order_by('-updated_at')[:5]
-            if recent_tasks.exists():
-                history_text = "\n\nRecent Task History for the User's Field:\n"
-                for rt in recent_tasks:
-                    history_text += f"- Task: {
-                        rt.title} | Status: {
-                        rt.status} | Date: {
-                        rt.date.date()} | Reason: {
-                        rt.reason}\n"
-                rag_context += history_text
-        except Exception:
-            pass
+
 
     from datetime import datetime
     datetime.now().strftime("%Y-%m-%d")
@@ -916,23 +860,7 @@ def chat_sync_plan(request):
             status='active'
         )
 
-    tasks_data = sync_data.get('tasks')
-    if isinstance(tasks_data, list):
-        for t in tasks_data:
-            ScheduleTask.objects.create(
-                owner=request.user,
-                farm=farm,
-                cropPlan=plan_obj,  # Might be None if only schedule was generated
-                title=t.get('title', 'AI Task'),
-                description=t.get('description', ''),
-                category=t.get('category', 'monitoring'),
-                date=t.get('date', '2025-01-01T08:00:00Z'),
-                status='pending',
-                aiGenerated=True
-            )
-            tasks_generated += 1
-
-    return Response({'success': True, 'tasksGenerated': tasks_generated})
+    return Response({'success': True})
 
 
 @api_view(['GET'])
@@ -1003,182 +931,4 @@ def weather_cache_set(request):
     return Response(WeatherCacheSerializer(cache).data)
 
 
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def daily_tasks(request):
-    """
-    POST /daily-tasks
-    Returns tasks for today adjusted by the rule engine.
-    """
-    from datetime import datetime, timedelta
-    from django.utils import timezone
-    from .services.weather_provider import WeatherProvider
-    from .models import Farm, CropPlan, ScheduleTask
-    from .serializers import ScheduleTaskSerializer
 
-    farm_id = request.data.get('field_id')
-    date_str = request.data.get('date')  # YYYY-MM-DD
-
-    if not farm_id:
-        return Response({"error": "field_id required"}, status=400)
-
-    try:
-        farm = Farm.objects.get(id=farm_id, owner=request.user)
-        active_plans = CropPlan.objects.filter(farm=farm, status="active")
-    except Farm.DoesNotExist:
-        return Response({"error": "Farm not found"}, status=404)
-
-    if not active_plans.exists():
-        return Response(
-            {"error": "No active crop plan found for this field."}, status=404)
-
-    target_date = datetime.strptime(
-        date_str, "%Y-%m-%d").date() if date_str else timezone.now().date()
-
-    # --- JIT Generation ---
-    from .services.schedule_engine import generate_schedule_for_crop_plan
-    
-    for plan in active_plans:
-        # Calculate elapsed days since sowing
-        sowing_date = plan.sowingDate.date() if hasattr(plan.sowingDate, 'date') else plan.sowingDate
-        elapsed_days = max(0, (target_date - sowing_date).days)
-        
-        # Generate tasks for today and the next 3 days dynamically (Rolling Window)
-        try:
-            generate_schedule_for_crop_plan(plan, start_day=max(0, elapsed_days - 1), end_day=elapsed_days + 3)
-        except Exception as e:
-            import logging
-            logging.getLogger("krishi_core").error("JIT schedule generation failed for plan %s: %s", plan.id, e)
-    # ----------------------
-
-    # 1. Fetch weather
-    weather = WeatherProvider.get_forecast(
-        farm.district if hasattr(
-            farm, 'district') else 'Unknown', target_date)
-    rain_24h = weather.get("forecast_24h", {}).get("rain_mm", 0)
-    humidity = weather.get("current", {}).get("humidity", 0)
-
-    # 2. Rule Engine Application
-    for plan in active_plans:
-        # Rule 2: Overdue Check (Irrigation / Fertilizer)
-        overdue_threshold = timezone.now() - timedelta(days=3)
-        overdue_tasks = ScheduleTask.objects.filter(
-            cropPlan=plan,
-            status="pending",
-            date__lt=overdue_threshold,
-            category__in=["irrigation", "fertilizer"]
-        )
-
-        if overdue_tasks.exists():
-            # Shift everything in this stage
-            gap = 3  # Shift by 3 days for simplicity
-            plan.driftDays += gap
-            plan.save()
-
-            for t in overdue_tasks:
-                # Generate RAG explanation
-                reason = "Task was severely overdue, shifting downstream schedule."
-                t.status = "delayed"
-                t.reason = reason
-                t.save()
-
-                # Shift downstream
-                downstream = ScheduleTask.objects.filter(
-                    cropPlan=plan, status="pending", date__gte=t.date
-                )
-                for dt in downstream:
-                    dt.date = dt.date + timedelta(days=gap)
-                    dt.save()
-
-    # Rule 1 & 3: Daily specific adjustments
-    tasks_today = ScheduleTask.objects.filter(
-        cropPlan__in=active_plans,
-        date__date__lte=target_date,
-        status="pending"
-    )
-
-    for t in tasks_today:
-        adjusted = False
-
-        # Rule 1
-        if t.category == "irrigation" and rain_24h > 15:
-            t.status = "skipped"
-            t.reason = f"Expected heavy rain ({rain_24h}mm), irrigation skipped."
-            adjusted = True
-
-        # Rule 3
-        elif t.category == "monitoring" and "flowering" in (t.stageName or "").lower():
-            if humidity > 80 and rain_24h > 0:
-                t.priority = "critical"
-                t.reason = "High humidity and rain increases fungal risk. Critical pest scouting required."
-                adjusted = True
-
-        if adjusted:
-            if not t.reason.startswith("AI:"):
-                t.reason = "AI: " + t.reason
-            t.save()
-
-    # Refetch today's active tasks to return
-    tasks_to_return = ScheduleTask.objects.filter(
-        cropPlan__in=active_plans,
-        date__date__lte=target_date,
-        status__in=["pending", "delayed"]
-    )
-
-    serializer = ScheduleTaskSerializer(tasks_to_return, many=True)
-    # Sum driftDays across all plans for simplicity (or send dict mapping plan ID to driftDays)
-    total_drift = sum(p.driftDays for p in active_plans)
-    return Response({"tasks": serializer.data,
-                     "weather": weather,
-                     "driftDays": total_drift})
-
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def task_complete(request):
-    """
-    POST /task-complete
-    Logs actual completion date and updates drift.
-    """
-    from datetime import datetime, timedelta
-    from django.utils import timezone
-    from .models import ScheduleTask
-
-    task_id = request.data.get('task_id')
-    status = request.data.get('status', 'done')
-    date_str = request.data.get('date')
-
-    if not task_id:
-        return Response({"error": "task_id required"}, status=400)
-
-    try:
-        task = ScheduleTask.objects.get(id=task_id, owner=request.user)
-    except ScheduleTask.DoesNotExist:
-        return Response({"error": "Task not found"}, status=404)
-
-    completed_date = datetime.strptime(
-        date_str, "%Y-%m-%d").date() if date_str else timezone.now().date()
-
-    task.status = status
-    task.completedDate = completed_date
-
-    # Calculate drift
-    scheduled_date = task.date.date()
-    if completed_date > scheduled_date:
-        days_late = (completed_date - scheduled_date).days
-        plan = task.cropPlan
-        if plan:
-            plan.driftDays += days_late
-            plan.save()
-
-            # Shift downstream tasks
-            downstream = ScheduleTask.objects.filter(
-                cropPlan=plan, status="pending", date__gte=task.date
-            )
-            for dt in downstream:
-                dt.date = dt.date + timedelta(days=days_late)
-                dt.save()
-
-    task.save()
-    return Response({"message": "Task updated", "driftDaysAdded": (
-        completed_date - scheduled_date).days if completed_date > scheduled_date else 0})

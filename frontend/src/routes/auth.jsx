@@ -23,7 +23,7 @@ const validators = {
   firstName: (v) => (!v.trim() ? "First name is required" : v.trim().length < 2 ? "Must be at least 2 characters" : ""),
   lastName: (v) => (!v.trim() ? "Last name is required" : ""),
   email: (v) => (!v.trim() ? "Email is required" : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? "Enter a valid email address" : ""),
-  phone: (v) => (v && !/^\+?[\d\s\-()]{8,15}$/.test(v) ? "Enter a valid phone number" : ""),
+  phone: (v) => (!v || !/^\d{10}$/.test(v) ? "Enter a valid 10-digit phone number" : ""),
   password: (v) => {
     if (!v) return "Password is required";
     if (v.length < 8) return "Password must be at least 8 characters";
@@ -59,6 +59,7 @@ function AuthPage() {
   const [forgotPasswordNew, setForgotPasswordNew] = useState("");
   const [forgotError, setForgotError] = useState("");
   const [registerOtp, setRegisterOtp] = useState("");
+  const [resendTimer, setResendTimer] = useState(0);
 
   const [otpLoginStep, setOtpLoginStep] = useState("email");
   const [otpLoginEmail, setOtpLoginEmail] = useState("");
@@ -204,33 +205,25 @@ function AuthPage() {
           }
           return;
         }
-        setStep(2);
-      } catch (err) {
-        setApiError("Failed to check if account exists. Please try again.");
-      }
-      return;
-    }
-
-    // Step 2 -> Request OTP
-    if (step === 2) {
-      if (!validateStep2()) return;
-      try {
-        const res = await fetch(`${API_URL}/auth/otp/request`, {
+        // If email doesn't exist, request OTP immediately
+        const otpRes = await fetch(`${API_URL}/auth/otp/request`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: formData.email }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || "Failed to send OTP");
-        setStep(3);
+        const otpData = await otpRes.json();
+        if (!otpRes.ok) throw new Error(otpData.message || "Failed to send OTP");
+        
+        setStep(2);
       } catch (err) {
-        setApiError(err.message);
+        console.error("Auth check failed:", err);
+        setApiError("Error: " + err.message);
       }
       return;
     }
 
-    // Step 3 -> Verify OTP & Register
-    if (step === 3) {
+    // Step 2 -> Verify OTP & Register User
+    if (step === 2) {
       if (!registerOtp) {
         setApiError("Please enter the 6-digit OTP.");
         return;
@@ -243,8 +236,9 @@ function AuthPage() {
           email: formData.email,
           password: formData.password,
           role: formData.role,
-          location: formData.location || "Pune, Maharashtra",
-          waterResources: formData.waterResources.length > 0 ? formData.waterResources : ["Borewell"],
+          // Default location for now, will be updated in Step 3
+          location: "Not set",
+          waterResources: ["Borewell"],
           otp: registerOtp,
         };
 
@@ -256,11 +250,41 @@ function AuthPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Registration failed");
 
+        // Log the user in
         login(data.token);
-        navigate({ to: "/farms" });
+        
+        // Move to location setup
+        setStep(3);
       } catch (err) {
         setApiError(err.message);
       }
+      return;
+    }
+
+    // Step 3 -> Location & Profile Setup
+    if (step === 3) {
+      if (!validateStep2()) return;
+      try {
+        const res = await fetch(`${API_URL}/auth/profile`, {
+          method: "PATCH",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem("krishimitra_token")}` 
+          },
+          body: JSON.stringify({
+            location: formData.location || "Not set",
+            // Assuming water resources are managed via Farm object later, 
+            // but we can pass it if backend accepts it or handle it separately.
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Failed to update profile");
+        
+        navigate({ to: "/dashboard" });
+      } catch (err) {
+        setApiError(err.message);
+      }
+      return;
     }
   };
 
@@ -540,6 +564,60 @@ function AuthPage() {
         <div className="animate-fade-up space-y-4">
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4">
             <div className="flex items-center gap-2 text-primary font-semibold mb-1">
+              <Mail className="h-4 w-4" /> Verify your email
+            </div>
+            <p className="text-xs text-muted-foreground">
+              We've sent a 6-digit code to <strong>{formData.email}</strong>.
+            </p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-foreground">Enter OTP</label>
+            <input
+              type="text"
+              maxLength={6}
+              value={registerOtp}
+              onChange={(e) => { setRegisterOtp(e.target.value); setApiError(""); }}
+              placeholder="123456"
+              className="w-full rounded-xl border border-input bg-background/50 px-3.5 py-3 text-sm text-foreground outline-none tracking-widest text-center focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <div className="text-center mt-2">
+            <button
+              type="button"
+              onClick={async () => {
+                if (resendTimer > 0) return;
+                try {
+                  const API_URL = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api");
+                  const res = await fetch(`${API_URL}/auth/otp/request`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: formData.email }),
+                  });
+                  if (res.ok) {
+                    setResendTimer(60);
+                    const timer = setInterval(() => {
+                      setResendTimer((prev) => {
+                        if (prev <= 1) { clearInterval(timer); return 0; }
+                        return prev - 1;
+                      });
+                    }, 1000);
+                  }
+                } catch (e) {}
+              }}
+              className={`text-xs font-medium ${resendTimer > 0 ? "text-muted-foreground cursor-not-allowed" : "text-primary hover:underline"}`}
+            >
+              {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : "Resend OTP"}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (step === 3) {
+      return (
+        <div className="animate-fade-up space-y-4">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4">
+            <div className="flex items-center gap-2 text-primary font-semibold mb-1">
               <MapPin className="h-4 w-4" /> Farm Location
             </div>
             <p className="text-xs text-muted-foreground">
@@ -592,32 +670,6 @@ function AuthPage() {
                 </p>
               )}
             </div>
-          </div>
-        </div>
-      );
-    }
-    
-    if (step === 3) {
-      return (
-        <div className="animate-fade-up space-y-4">
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-4">
-            <div className="flex items-center gap-2 text-primary font-semibold mb-1">
-              <Mail className="h-4 w-4" /> Verify your email
-            </div>
-            <p className="text-xs text-muted-foreground">
-              We've sent a 6-digit code to <strong>{formData.email}</strong>.
-            </p>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-foreground">Enter OTP</label>
-            <input
-              type="text"
-              maxLength={6}
-              value={registerOtp}
-              onChange={(e) => { setRegisterOtp(e.target.value); setApiError(""); }}
-              placeholder="123456"
-              className="w-full rounded-xl border border-input bg-background/50 px-3.5 py-3 text-sm text-foreground outline-none tracking-widest focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
-            />
           </div>
         </div>
       );
@@ -699,7 +751,7 @@ function AuthPage() {
                     type="submit"
                     className="group flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 mt-6 text-sm font-bold text-primary-foreground shadow-[0_0_28px_-8px_var(--color-primary)] transition-transform hover:scale-[1.02]"
                   >
-                    {mode === "login" ? "Sign in to dashboard" : step < 3 ? "Continue" : "Complete Registration"}
+                    {mode === "login" ? "Sign in to dashboard" : step === 1 ? "Continue" : step === 2 ? "Verify OTP" : "Complete Setup"}
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                   </button>
                 </form>

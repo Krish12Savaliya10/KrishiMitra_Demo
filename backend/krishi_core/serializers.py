@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import (
-    User, Farm, CropPlan, MarketPrice, ScheduleTask,
+    User, Farm, CropPlan, MarketPrice,
     Recommendation, Alert, Expense, Notification,
     WeatherCache, ChatMessage
 )
@@ -34,23 +34,11 @@ class FarmSerializer(BaseModelSerializer):
         fields = '__all__'
         read_only_fields = ['owner']
 
-class ScheduleTaskSerializer(BaseModelSerializer):
-    class Meta:
-        model = ScheduleTask
-        fields = '__all__'
-        read_only_fields = ['owner']
-
 class CropPlanSerializer(BaseModelSerializer):
-    tasks = serializers.SerializerMethodField()
-
     class Meta:
         model = CropPlan
         fields = '__all__'
         read_only_fields = ['owner']
-
-    def get_tasks(self, obj):
-        tasks = obj.schedule_tasks.all()
-        return ScheduleTaskSerializer(tasks, many=True).data
 
 class MarketPriceSerializer(BaseModelSerializer):
     class Meta:

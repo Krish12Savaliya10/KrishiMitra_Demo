@@ -22,11 +22,9 @@ python manage.py migrate          # creates the local sqlite (Django bookkeeping
 
 Copy these artifacts from the old `ml-service/` folder into place (paths are
 already referenced by `core/ml_loader.py`):
-- `../crop_model.keras`, `../class_names.json`, `../yolov8n.pt` — same relative
-  locations as before, one level above this project (project root).
-- `core/model_rf/best_model.joblib` — optional; falls back to the rule-based
-  heuristic scorer if missing (same behavior as the Flask version).
 - `../knowledge-base/chroma_db/` — the ChromaDB persistence folder.
+
+**Note:** Local CNN model artifacts (YOLO, Keras) are no longer required as image analysis is now powered by the Gemini API. Ensure you have `GEMINI_API_KEY` set in your `.env` file!
 
 ## Run
 ```bash
@@ -43,8 +41,7 @@ python manage.py runserver 0.0.0.0:5005
 - **Pandas / EDA, regression & classification (Units 1, 4, 5)**: still live in
   `SoilRecommendView` (RandomForest classifier + heuristic scorer using a
   pandas DataFrame for model input).
-- **Deep learning / CNN (Unit 6)**: `PredictDiseaseView` — YOLO leaf crop →
-  Keras CNN classification → confidence/top-3, unchanged.
+- **Deep learning / Multimodal AI (Unit 6)**: `PredictDiseaseView` — Now uses the Gemini API to analyze crop images directly, replacing the heavy local CNN/YOLO pipeline.
 - **Web scraping / APIs (Unit 7)**: `WeatherView` calls the Open-Meteo REST
   API via `requests`, unchanged; Gemini/Ollama calls in `PredictDiseaseView`
   are also REST API integration.

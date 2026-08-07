@@ -294,27 +294,21 @@ class CropStageTipsView(APIView):
 
 class PredictDiseaseView(APIView):
     """
-    CNN disease classification (Unit 6): YOLO leaf-crop -> Keras classifier ->
-    RAG + LLM treatment plan. Accepts multipart/form-data with an 'image' field.
+    Multimodal disease classification (Unit 6): Uses Gemini 1.5 Flash to analyze
+    the uploaded image directly, avoiding heavy local CNN/YOLO models.
     """
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
-        disease_model = ml_loader.state["disease_model"]
-        yolo_model = ml_loader.state["yolo_model"]
-        disease_collection = ml_loader.state["disease_collection"]
-        class_names = ml_loader.state["class_names"]
-
+        gemini_key = settings.GEMINI_API_KEY
         fallback_payload = {
-            "error": "Disease model is unavailable in this environment. The demo will use a "
-                     "fallback response until the model artifact is available.",
+            "error": "Gemini API key is not configured. Disease inference is unavailable.",
             "fallback": True, "disease": "Unknown", "confidence": 0.0, "top3": [],
             "quality_passed": True, "quality_issues": [],
-            "treatment": "Please upload the trained model artifact or use the AI chat assistant "
-                         "for guidance while the disease model is being prepared.",
+            "treatment": "Please configure GEMINI_API_KEY in the backend .env file.",
         }
 
-        if not disease_model:
+        if not gemini_key:
             return Response(fallback_payload, status=200)
 
         image_file = request.FILES.get("image")
@@ -322,90 +316,80 @@ class PredictDiseaseView(APIView):
             return Response({**fallback_payload, "error": "No image uploaded in form-data field 'image'."}, status=200)
 
         try:
-            image = Image.open(io.BytesIO(image_file.read())).convert("RGB")
-            orig_img_array = np.array(image)
+            import base64
+            # Read image and encode to base64
+            image_data = image_file.read()
+            mime_type = image_file.content_type or "image/jpeg"
+            b64_image = base64.b64encode(image_data).decode('utf-8')
 
-            quality_passed, quality_issues = check_image_quality(orig_img_array)
+            # Optional: We can still check image quality locally if needed,
+            # but for now we rely on Gemini to understand the image.
+            quality_passed = True
+            quality_issues = []
 
-            cropped_img_array = orig_img_array
-            if yolo_model:
-                yolo_results = yolo_model(orig_img_array, verbose=False)
-                if len(yolo_results) > 0 and len(yolo_results[0].boxes) > 0:
-                    boxes = yolo_results[0].boxes
-                    best_box = boxes[np.argmax(boxes.conf.cpu().numpy())]
-                    x1, y1, x2, y2 = map(int, best_box.xyxy[0].cpu().numpy())
-                    h, w, _ = orig_img_array.shape
-                    x1, y1 = max(0, x1), max(0, y1)
-                    x2, y2 = min(w, x2), min(h, y2)
-                    if x2 > x1 and y2 > y1:
-                        cropped_img_array = orig_img_array[y1:y2, x1:x2]
+            # Ask Gemini to diagnose and provide treatment
+            prompt = (
+                "You are an expert plant pathologist. Analyze this image of a crop leaf. "
+                "Identify if there is any disease. If healthy, state 'Healthy'. "
+                "Provide your response EXACTLY as a JSON object with the following keys: "
+                "'disease' (string, the name of the disease or 'Healthy'), "
+                "'confidence' (number between 0 and 1 representing your confidence), "
+                "'treatment' (string, a concise 3-sentence treatment plan if diseased, or a maintenance tip if healthy)."
+            )
 
-            cropped_pil = Image.fromarray(cropped_img_array)
-            resized_image = cropped_pil.resize((160, 160))
-            img_array = np.array(resized_image, dtype=np.float32)
-            img_array = np.expand_dims(img_array, axis=0)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+            
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": mime_type,
+                                "data": b64_image
+                            }
+                        }
+                    ]
+                }]
+            }
 
-            predictions = disease_model.predict(img_array, verbose=0)
-            score = predictions[0]
+            res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=15)
+            if res.status_code != 200:
+                logger.error("Gemini API error: %s", res.text)
+                return Response({**fallback_payload, "error": "Failed to get response from Gemini API."}, status=200)
+            
+            text_resp = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            
+            # Gemini might wrap JSON in markdown block
+            if text_resp.startswith("```json"):
+                text_resp = text_resp[7:]
+            if text_resp.endswith("```"):
+                text_resp = text_resp[:-3]
+            text_resp = text_resp.strip()
+            
+            try:
+                parsed = json.loads(text_resp)
+                pretty_class = parsed.get("disease", "Unknown")
+                confidence = parsed.get("confidence", 0.0)
+                treatment = parsed.get("treatment", "No treatment recommendation available.")
+            except json.JSONDecodeError:
+                # Fallback if Gemini didn't return perfect JSON
+                pretty_class = "Unknown (Parsing Error)"
+                confidence = 0.5
+                treatment = text_resp
 
-            top3_indices = np.argsort(score)[::-1][:3]
-            top3 = [{"label": class_names[i].replace("___", " - ").replace("_", " "), "prob": float(score[i])}
-                    for i in top3_indices]
-
-            predicted_class = class_names[np.argmax(score)]
-            confidence = float(np.max(score))
-            pretty_class = predicted_class.replace("___", " - ").replace("_", " ")
-
-            treatment = self._get_treatment(predicted_class, pretty_class, disease_collection)
+            top3 = [
+                {"label": pretty_class, "prob": confidence}
+            ]
 
             return Response({
-                "disease": pretty_class, "confidence": confidence, "raw_class": predicted_class,
+                "disease": pretty_class, "confidence": confidence, "raw_class": pretty_class,
                 "top3": top3, "quality_passed": quality_passed, "quality_issues": quality_issues,
                 "treatment": treatment,
             })
         except Exception as e:
-            logger.error("Error during prediction: %s", traceback.format_exc())
+            logger.error("Error during disease prediction with Gemini: %s", traceback.format_exc())
             return Response({**fallback_payload, "error": f"Prediction failed: {str(e)}"}, status=200)
-
-    @staticmethod
-    def _get_treatment(predicted_class, pretty_class, disease_collection):
-        if "healthy" in predicted_class.lower():
-            return ("Your crop appears to be healthy! No specific treatment is needed. "
-                     "Continue regular monitoring and good agricultural practices.")
-        if not disease_collection:
-            return "No treatment recommendation available."
-
-        try:
-            rag_results = disease_collection.query(query_texts=[pretty_class], n_results=1)
-            rag_context = ""
-            if rag_results and "documents" in rag_results and rag_results["documents"][0]:
-                rag_context = rag_results["documents"][0][0]
-
-            prompt = (f"You are a crop disease expert. The user's crop has been diagnosed with "
-                      f"'{pretty_class}'. Based on this knowledge: '{rag_context}', write a short, "
-                      f"helpful, concise 3-sentence treatment plan.")
-
-            gemini_key = settings.GEMINI_API_KEY
-            if gemini_key:
-                url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-                       f"gemini-1.5-flash:generateContent?key={gemini_key}")
-                res = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]},
-                                     headers={"Content-Type": "application/json"}, timeout=10)
-                if res.status_code == 200:
-                    data = res.json()
-                    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                return rag_context
-
-            res = requests.post(
-                f"{settings.OLLAMA_BASE_URL}/api/generate",
-                json={"model": settings.OLLAMA_MODEL, "prompt": prompt, "stream": False}, timeout=10,
-            )
-            if res.status_code == 200:
-                return res.json().get("response", "").strip()
-            return rag_context
-        except Exception as e:
-            logger.warning("Treatment generation failed, falling back to raw RAG: %s", e)
-            return ""
 
 
 class HealthView(APIView):

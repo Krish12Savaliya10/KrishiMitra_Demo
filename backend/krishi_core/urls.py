@@ -7,7 +7,6 @@ router = DefaultRouter(trailing_slash=False)
 router.register(r'users', views.UserViewSet)
 router.register(r'farms', views.FarmViewSet)
 router.register(r'crop-plans', views.CropPlanViewSet)
-router.register(r'schedule', views.ScheduleTaskViewSet)
 router.register(r'recommendations', views.RecommendationViewSet)
 router.register(r'alerts', views.AlertViewSet)
 router.register(r'expenses', views.ExpenseViewSet)
@@ -45,10 +44,6 @@ urlpatterns = [
     
     # Market endpoints
     path('market/locations', views.market_locations, name='market_locations'),
-    
-    # Adaptive Crop Planning endpoints
-    path('daily-tasks', views.daily_tasks, name='daily_tasks'),
-    path('task-complete', views.task_complete, name='task_complete'),
     
     # ML & Weather endpoints
     path("retrieve", views_ml.RetrieveView.as_view()),

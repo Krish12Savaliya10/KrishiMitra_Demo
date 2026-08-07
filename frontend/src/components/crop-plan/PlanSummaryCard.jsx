@@ -1,19 +1,14 @@
 import React from 'react';
 import { ClipboardList } from 'lucide-react';
 
-export function PlanSummaryCard({ activePlan, durationDays, harvestDate }) {
+export function PlanSummaryCard({ activePlan, durationDays, harvestDate, farmName }) {
   if (!activePlan) return null;
 
   const data = [
     { label: "Crop", value: activePlan.cropName || "Not Available" },
-    { label: "Variety", value: activePlan.variety || "Not Available" },
-    { label: "Farm Name", value: activePlan.farmName || "Not Available" },
+    { label: "Farm Name", value: farmName || "Not Available" },
     { label: "Area", value: activePlan.areaAcres ? `${activePlan.areaAcres} acres` : "Not Available" },
     { label: "Season", value: activePlan.season || "Not Available" },
-    { label: "Seed Rate", value: activePlan.seedRateKgPerAcre ? `${activePlan.seedRateKgPerAcre} kg/acre` : "Not Available" },
-    { label: "Expected Yield", value: activePlan.targetYieldKg ? `${activePlan.targetYieldKg} kg` : "Not Available" },
-    { label: "Estimated Cost", value: activePlan.estimatedCost ? `₹${activePlan.estimatedCost.toLocaleString("en-IN")}` : "Not Available" },
-    { label: "Expected Revenue", value: activePlan.expectedRevenue ? `₹${activePlan.expectedRevenue.toLocaleString("en-IN")}` : "Not Available" },
     { label: "Harvest Date", value: harvestDate || "Not Available" },
     { label: "Crop Duration", value: durationDays ? `${durationDays} days` : "Not Available" },
   ];

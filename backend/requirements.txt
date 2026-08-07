@@ -10,8 +10,6 @@ sentence-transformers
 Pillow
 numpy
 pandas
-opencv-python-headless
-ultralytics
-joblib
+
 requests
 google-auth

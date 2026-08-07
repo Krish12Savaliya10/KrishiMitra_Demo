@@ -80,6 +80,7 @@ class CropPlan(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="crop_plans")
     farm = models.ForeignKey(Farm, on_delete=models.CASCADE, related_name="crop_plans")
     cropName = models.CharField(max_length=100)
+    areaAcres = models.FloatField(default=1.0)
     season = models.CharField(max_length=100)
     sowingDate = models.DateTimeField()
     expectedHarvestDate = models.DateTimeField()
@@ -117,43 +118,8 @@ class MarketPrice(models.Model):
     class Meta:
         unique_together = ('state', 'district', 'market', 'commodity', 'arrival_date')
 
-class ScheduleTask(models.Model):
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="schedule_tasks")
-    farm = models.ForeignKey(Farm, on_delete=models.CASCADE, related_name="schedule_tasks")
-    cropPlan = models.ForeignKey(CropPlan, on_delete=models.SET_NULL, null=True, blank=True, related_name="schedule_tasks")
-    title = models.CharField(max_length=255)
-    description = models.TextField(blank=True, default="")
-    date = models.DateTimeField(db_index=True)
-    originalDate = models.DateTimeField(null=True, blank=True)
-    priority = models.CharField(
-        max_length=20,
-        choices=[("low", "Low"), ("medium", "Medium"), ("high", "High")],
-        default="medium"
-    )
-    category = models.CharField(
-        max_length=50,
-        choices=[
-            ("planting", "Planting"), ("irrigation", "Irrigation"), ("fertilizer", "Fertilizer"),
-            ("monitoring", "Monitoring"), ("maintenance", "Maintenance"), ("harvest", "Harvest"), ("other", "Other")
-        ],
-        default="monitoring"
-    )
-    isCritical = models.BooleanField(default=False)
-    status = models.CharField(
-        max_length=20,
-        choices=[("pending", "Pending"), ("done", "Done"), ("delayed", "Delayed"), ("skipped", "Skipped")],
-        default="pending"
-    )
-    completedDate = models.DateTimeField(null=True, blank=True)
-    reason = models.TextField(blank=True, default="")
-    aiGenerated = models.BooleanField(default=True)
-    fieldNotes = models.TextField(blank=True, default="")
-    dayNumber = models.IntegerField(default=0)
-    stageName = models.CharField(max_length=100, blank=True, default="")
-    icon = models.CharField(max_length=10, default="📋")
-    estimatedMinutes = models.IntegerField(default=45)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+
+
 
 class Recommendation(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recommendations")
