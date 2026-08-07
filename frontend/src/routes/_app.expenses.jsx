@@ -39,14 +39,20 @@ function ExpensesPage() {
   });
 
   const fetchExpenses = useCallback(async () => {
-    if (!activeFarmId || !token) return;
+    if (!token) return;
     try {
-      const data = await fetchScoped("/expenses");
-      setExpenses(Array.isArray(data) ? data : []);
+      const url = activeFarmId ? `/expenses?farm=${activeFarmId}` : `/expenses`;
+      const res = await fetch(`${import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api")}${url}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExpenses(Array.isArray(data) ? data : []);
+      }
     } catch (err) {
       console.error(err);
     }
-  }, [activeFarmId, token, fetchScoped]);
+  }, [activeFarmId, token]);
 
   useEffect(() => {
     fetchExpenses();
@@ -54,7 +60,6 @@ function ExpensesPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!activeFarmId) return toast.error("Select a farm first");
     // Inline validation
     const newErrors = {};
     if (!formData.label.trim()) newErrors.label = "Description is required";
@@ -64,15 +69,30 @@ function ExpensesPage() {
     setExpenseErrors({});
     setIsSubmitting(true);
     try {
-      const res = await postScoped("/expenses", {
-        label: formData.label,
-        category: formData.category,
-        amountRs: Number(formData.amountRs),
+      const API_URL = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api");
+      const res = await fetch(`${API_URL}/expenses`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          label: formData.label,
+          category: formData.category,
+          amountRs: Number(formData.amountRs),
+          ...(activeFarmId ? { farm: activeFarmId } : {})
+        })
       });
-      if (res && res._id) {
-        setFormData({ label: "", category: "seeds", amountRs: "" });
-        fetchExpenses();
-        toast.success("Expense recorded");
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data && (data._id || data.id)) {
+          setFormData({ label: "", category: "seeds", amountRs: "" });
+          fetchExpenses();
+          toast.success("Expense recorded");
+        } else {
+          toast.error("Failed to add expense");
+        }
       } else {
         toast.error("Failed to add expense");
       }

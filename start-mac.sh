@@ -5,7 +5,7 @@ echo "========================================="
 
 # Kill any existing processes on ports 3000, 5001
 echo "Cleaning up old processes..."
-kill $(lsof -ti :3000,5001) 2>/dev/null
+kill -9 $(lsof -ti :3000,5001) 2>/dev/null
 sleep 2
 
 # Start Backend

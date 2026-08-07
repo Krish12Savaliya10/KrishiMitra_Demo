@@ -1,7 +1,7 @@
 import React from 'react';
 import { ClipboardList } from 'lucide-react';
 
-export function PlanSummaryCard({ activePlan, durationDays, harvestDate, farmName }) {
+export function PlanSummaryCard({ activePlan, durationDays, harvestDate, farmName, advancedPredictions }) {
   if (!activePlan) return null;
 
   const data = [
@@ -12,6 +12,16 @@ export function PlanSummaryCard({ activePlan, durationDays, harvestDate, farmNam
     { label: "Harvest Date", value: harvestDate || "Not Available" },
     { label: "Crop Duration", value: durationDays ? `${durationDays} days` : "Not Available" },
   ];
+
+  if (advancedPredictions?.yield) {
+    data.push({ label: "AI Yield Prediction", value: `${advancedPredictions.yield} Tons` });
+  }
+  if (advancedPredictions?.fertilizer) {
+    data.push({ label: "AI Rec. Fertilizer", value: advancedPredictions.fertilizer });
+  }
+  if (advancedPredictions?.irrigation) {
+    data.push({ label: "AI Irrigation Need", value: advancedPredictions.irrigation });
+  }
 
   return (
     <div className="glass rounded-2xl p-5 shadow-sm h-full flex flex-col">

@@ -143,6 +143,46 @@ function CropPlanPage() {
     return Math.max(0, activeFarm.areaAcres - usedArea);
   }, [activeFarm, cropPlans]);
 
+  const [advancedPredictions, setAdvancedPredictions] = useState(null);
+
+  const activePlan = cropPlans.find(p => p._id === selectedPlanId) || cropPlans[0] || null;
+
+  useEffect(() => {
+    const fetchPredictions = async () => {
+      if (!activePlan || !token) return;
+      try {
+        const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+        const basePayload = { 
+          Crop: activePlan.cropName || "Cotton", 
+          Crop_Type: activePlan.cropName || "Cotton",
+          Area: activePlan.areaAcres || 1.0,
+          Field_Area_hectare: activePlan.areaAcres ? activePlan.areaAcres * 0.404 : 1.0
+        };
+
+        const [yieldRes, fertRes, irrigRes] = await Promise.all([
+          fetch(`${API_URL}/predict_yield`, { method: "POST", headers, body: JSON.stringify(basePayload) }),
+          fetch(`${API_URL}/recommend_fertilizer`, { method: "POST", headers, body: JSON.stringify(basePayload) }),
+          fetch(`${API_URL}/predict_irrigation`, { method: "POST", headers, body: JSON.stringify(basePayload) })
+        ]);
+
+        const [yieldData, fertData, irrigData] = await Promise.all([
+          yieldRes.ok ? yieldRes.json() : {},
+          fertRes.ok ? fertRes.json() : {},
+          irrigRes.ok ? irrigRes.json() : {}
+        ]);
+
+        setAdvancedPredictions({
+          yield: yieldData.predicted_yield,
+          fertilizer: fertData.recommended_fertilizer,
+          irrigation: irrigData.irrigation_need
+        });
+      } catch (err) {
+        console.error("Failed to fetch advanced predictions", err);
+      }
+    };
+    fetchPredictions();
+  }, [activePlan, token]);
+
   useEffect(() => {
     if (search.crop) {
       setAiForm(prev => ({ ...prev, cropName: search.crop, areaAcres: availableArea }));
@@ -252,13 +292,7 @@ function CropPlanPage() {
         data.warnings.forEach(w => toast.warning(w));
       }
       
-      if (data.tasksGenerated > 0 && (!data.warnings || data.warnings.length === 0)) {
-        toast.success(`Plan saved! ${data.tasksGenerated} tasks generated.`);
-      } else if (data.tasksGenerated > 0) {
-        toast.success(`Plan saved with ${data.tasksGenerated} tasks (see warnings).`);
-      } else {
-        toast.warning("Plan saved, but no tasks were generated. Check your crop plan.");
-      }
+      toast.success("Crop Plan saved successfully!");
       
       setPreviewPlan(null);
       fetchCropPlans();
@@ -289,8 +323,6 @@ function CropPlanPage() {
       console.error(err);
     }
   }, [activeFarmId, token, fetchScoped]);
-
-  const activePlan = cropPlans.find(p => p._id === selectedPlanId) || cropPlans[0] || null;
 
   useEffect(() => {
     fetchCropPlans();
@@ -697,15 +729,46 @@ function CropPlanPage() {
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">Sowing Date</label>
                 <input 
                   type="date" 
+                  min={new Date().toISOString().split("T")[0]}
                   value={(previewPlan.sowing_date || previewPlan.cropPlan?.sowingDate || previewPlan.sowingDate || "").split("T")[0]} 
                   onChange={e => {
-                    if (previewPlan.sowing_date !== undefined) {
-                      setPreviewPlan({ ...previewPlan, sowing_date: e.target.value });
-                    } else if (previewPlan.cropPlan) {
-                      setPreviewPlan({ ...previewPlan, cropPlan: { ...previewPlan.cropPlan, sowingDate: e.target.value } });
+                    const newSowingDateStr = e.target.value;
+                    const oldSowingDateStr = (previewPlan.sowing_date || previewPlan.cropPlan?.sowingDate || previewPlan.sowingDate || "").split("T")[0];
+                    if (!newSowingDateStr || !oldSowingDateStr) return;
+
+                    const diffMs = new Date(newSowingDateStr) - new Date(oldSowingDateStr);
+                    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+                    
+                    const shiftDate = (dateStr) => {
+                      if (!dateStr) return dateStr;
+                      const d = new Date(dateStr);
+                      d.setDate(d.getDate() + diffDays);
+                      return d.toISOString().split('T')[0];
+                    };
+
+                    let updatedPlan = JSON.parse(JSON.stringify(previewPlan));
+                    
+                    const shiftPlanContent = (planObj) => {
+                      if (planObj.milestones) {
+                        planObj.milestones.forEach(m => { m.plannedDate = shiftDate(m.plannedDate); });
+                      }
+                      if (planObj.expectedHarvestDate) {
+                         planObj.expectedHarvestDate = shiftDate(planObj.expectedHarvestDate);
+                      }
+                      // Note: We don't have tasks directly in the plan object in preview, but if we did we'd shift them here
+                    };
+
+                    if (updatedPlan.sowing_date !== undefined) {
+                      updatedPlan.sowing_date = newSowingDateStr;
+                    } else if (updatedPlan.cropPlan) {
+                      updatedPlan.cropPlan.sowingDate = newSowingDateStr;
+                      shiftPlanContent(updatedPlan.cropPlan);
                     } else {
-                      setPreviewPlan({ ...previewPlan, sowingDate: e.target.value });
+                      updatedPlan.sowingDate = newSowingDateStr;
+                      shiftPlanContent(updatedPlan);
                     }
+
+                    setPreviewPlan(updatedPlan);
                   }}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none" 
                 />
@@ -782,6 +845,7 @@ function CropPlanPage() {
                 durationDays={durationDays}
                 harvestDate={harvestDate}
                 farmName={activeFarm?.name}
+                advancedPredictions={advancedPredictions}
               />
             </div>
           </div>

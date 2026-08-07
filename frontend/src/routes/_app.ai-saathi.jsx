@@ -706,6 +706,13 @@ function DiseaseScanner({ token }) {
               </div>
             </div>
           )}
+          
+          {result.treatment && !isFallback && (
+            <div className="rounded-2xl border border-border bg-surface p-5">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Treatment & Maintenance</p>
+              <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">{result.treatment}</p>
+            </div>
+          )}
 
           {result.top3 && (
             <div className="rounded-2xl border border-border bg-surface p-5">
@@ -748,7 +755,7 @@ function AiSaathiPage() {
   const [loading, setLoading] = useState(false);
   const endRef = useRef(null);
   const textRef = useRef(null);
-  const sessionId = useRef(`s-${Date.now()}`);
+  const sessionId = useRef("main-chat-session");
   const abortControllerRef = useRef(null);
   const fileInputRef = useRef(null);
   const [attachedImage, setAttachedImage] = useState(null);
@@ -768,15 +775,6 @@ function AiSaathiPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  const loadSessions = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api")}/chat/sessions`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setSessions(await res.json());
-    } catch (err) { console.error("Failed to load sessions", err); }
-  };
 
   const loadHistory = async (sid) => {
     if (!token || !sid) return;
@@ -797,7 +795,7 @@ function AiSaathiPage() {
   };
 
   useEffect(() => {
-    loadSessions();
+    loadHistory("main-chat-session");
     const params = new URLSearchParams(window.location.search);
     const initialPrompt = params.get("prompt");
     if (initialPrompt) { send(initialPrompt); window.history.replaceState({}, document.title, window.location.pathname); }
@@ -850,7 +848,6 @@ function AiSaathiPage() {
       }
       setMessages(p => p.map(m => m.id === aiMsg.id ? { ...m, isLoading: false } : m));
       emitAiSyncRefresh("chat");
-      loadSessions(); // Refresh sidebar history
     } catch (err) {
       if (err.name === "AbortError") {
         setMessages(p => p.map(m => m.id === aiMsg.id ? { ...m, isLoading: false } : m));
@@ -878,7 +875,7 @@ function AiSaathiPage() {
     setMessages(p => p.slice(0, idx));
     send(prevUser.text);
   };
-  const clear = () => { setMessages([]); sessionId.current = `s-${Date.now()}`; };
+  const clear = () => { setMessages([]); };
 
   const isEmpty = messages.length === 0;
 
@@ -887,33 +884,6 @@ function AiSaathiPage() {
       className="flex overflow-hidden bg-background"
       style={{ height: "calc(100vh - 57px)", marginLeft: "-28px", marginRight: "-28px", marginTop: "-24px", marginBottom: "-24px" }}>
       
-      {/* ── Left Sidebar (Claude style history) ── */}
-      <div className="w-64 border-r border-border bg-surface-2 flex flex-col shrink-0 hidden md:flex">
-        <div className="p-3">
-          <button onClick={clear}
-            className="flex w-full items-center gap-2 rounded-lg bg-surface hover:bg-border px-3 py-2 text-sm font-medium text-foreground transition-colors border border-border shadow-sm">
-            <Plus className="h-4 w-4" /> New chat
-          </button>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto px-2 pb-4">
-          <div className="px-2 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Recents
-          </div>
-          <div className="space-y-0.5">
-            {sessions.map(s => (
-              <button key={s.id} onClick={() => loadHistory(s.id)}
-                className={`flex w-full items-center rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${sessionId.current === s.id && tab === "chat" ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-surface"}`}>
-                <span className="truncate">{s.title}</span>
-              </button>
-            ))}
-            {sessions.length === 0 && (
-              <div className="px-2 py-3 text-xs text-muted-foreground">No recent chats</div>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* ── Main Content Area ── */}
       <div className="flex-1 flex flex-col min-w-0 bg-background relative">
         {/* ── Top bar ── */}
@@ -974,20 +944,6 @@ function AiSaathiPage() {
                       <h1 className="text-2xl font-bold text-foreground">How can I help your farm?</h1>
                       <p className="mt-2 text-sm text-muted-foreground">Ask anything about crops, soil, pests, budgets, weather, or schedules.</p>
                     </div>
-
-                    {/* Suggestion cards — Claude style 2-col */}
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {SUGGESTION_PROMPTS.map(p => (
-                        <button key={p.title} onClick={() => send(p.desc)}
-                          className="group flex items-start gap-3.5 rounded-2xl border border-border bg-surface p-4 text-left transition-all hover:border-foreground/20 hover:bg-surface-2 hover:shadow-sm">
-                          <span className="text-2xl shrink-0">{p.icon}</span>
-                          <div>
-                            <div className="text-sm font-semibold text-foreground">{p.title}</div>
-                            <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2 leading-relaxed">{p.desc}</div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 </div>
               ) : (
@@ -1007,11 +963,11 @@ function AiSaathiPage() {
                 <div className={`relative flex flex-col rounded-3xl border bg-surface transition-all ${loading ? "border-foreground/20" : "border-border focus-within:border-foreground/30 focus-within:shadow-sm"}`}>
                   <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleFileChange} />
                   {attachedImage && (
-                    <div className="px-5 pt-4 pb-1">
+                    <div className="px-5 pt-5 pb-2">
                       <div className="relative inline-block">
-                        <img src={attachedImage} alt="Attached" className="h-20 w-20 object-cover rounded-xl border border-border" />
-                        <button onClick={() => setAttachedImage(null)} className="absolute -top-2 -right-2 bg-foreground text-background rounded-full p-1 shadow-md hover:scale-105 transition-transform">
-                          <X className="h-3 w-3" />
+                        <img src={attachedImage} alt="Attached" className="h-28 w-28 object-cover rounded-xl border-2 border-primary shadow-md" />
+                        <button onClick={() => setAttachedImage(null)} className="absolute -top-3 -right-3 flex h-6 w-6 items-center justify-center bg-foreground text-background rounded-full shadow-md hover:scale-105 transition-transform">
+                          <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>

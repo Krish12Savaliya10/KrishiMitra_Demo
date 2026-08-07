@@ -12,7 +12,7 @@ from django.contrib.auth.hashers import make_password
 from .models import (
     User, Farm, CropPlan, MarketPrice, 
     Recommendation, Alert, Expense, Notification,
-    WeatherCache, ChatMessage
+    WeatherCache, ChatMessage, PasswordResetOTP
 )
 from .serializers import (
     UserSerializer, FarmSerializer, CropPlanSerializer,
@@ -634,6 +634,8 @@ def chat_stream(request):
 
 
 
+    farm_id = request.data.get('farmId')
+
     from datetime import datetime
     datetime.now().strftime("%Y-%m-%d")
 
@@ -692,7 +694,7 @@ def chat_stream(request):
                     start_day = stage_tasks['day_from_sowing_start'].min()
                     end_day = stage_tasks['day_from_sowing_end'].max()
                     start_date = sowing_date_obj + \
-                        timedelta(days=int(max(0, start_day)))
+                        timedelta(days=int(start_day))
 
                     milestones.append({
                         "stage": stage,
@@ -702,7 +704,7 @@ def chat_stream(request):
 
                 # Create detailed tasks
                 for _, row in crop_tasks.iterrows():
-                    start_day = int(max(0, row['day_from_sowing_start']))
+                    start_day = int(row['day_from_sowing_start'])
                     task_date = sowing_date_obj + timedelta(days=start_day)
 
                     tasks.append({
@@ -722,7 +724,7 @@ def chat_stream(request):
                         })
 
             if not crop_fert.empty:
-                # Inject fertilizer doses as tasks
+                # Inject basic fertilizer doses as tasks
                 for _, row in crop_fert.iterrows():
                     stage = row['stage'].lower()
                     # Determine approx day
@@ -748,6 +750,57 @@ def chat_stream(request):
                         "type": "Specific",
                         "amount": row['products_and_dose']
                     })
+                    
+            # 2. Add AI-driven Soil Fixes & Smart Fertilizer Suggestions
+            try:
+                from .services.ai_engine.llm_service import llm_service
+                
+                farm = Farm.objects.filter(id=farm_id).first() if farm_id else None
+                if farm and (farm.ph or farm.nitrogen or farm.ec):
+                    ideal_soil_text = crop_prof.iloc[0]['soil_type'] if not crop_prof.empty else "well drained, neutral pH"
+                    
+                    prompt = f"""
+You are an expert agronomist. 
+We are creating a crop plan for {req_crop}. The ideal soil condition for this crop is: {ideal_soil_text}.
+The user's farm soil test report shows:
+pH: {farm.ph or 'Unknown'}
+Nitrogen: {farm.nitrogen or 'Unknown'} kg/ha
+Phosphorus: {farm.phosphorus or 'Unknown'} kg/ha
+Potassium: {farm.potassium or 'Unknown'} kg/ha
+Organic Carbon: {farm.organicCarbon or 'Unknown'} %
+EC: {farm.ec or 'Unknown'} dS/m
+
+Output ONLY a raw JSON object with this exact schema:
+{{
+  "fixes": "A short, actionable paragraph explaining exactly what needs to be fixed to reach ideal conditions for {req_crop}.",
+  "fertilizer_recommendation": "A specific fertilizer suggestion based on the deficiencies.",
+  "add_as_task": true,
+  "task_title": "Soil Correction & Pre-sowing Fertilization",
+  "task_description": "Short summary of the fertilizer action required."
+}}
+"""
+                    ai_response = llm_service.generate_response(prompt)
+                    if isinstance(ai_response, dict) and not "error" in ai_response:
+                        milestones.insert(0, {
+                            "stage": "Pre-sowing Soil Correction",
+                            "plannedDate": sowing_date_str,
+                            "description": ai_response.get("fixes", "Adjust soil nutrients before sowing.")
+                        })
+                        fertilizer_events.append({
+                            "day": 0,
+                            "type": "Custom AI Recommendation",
+                            "amount": ai_response.get("fertilizer_recommendation", "Apply standard NPK basal dose.")
+                        })
+                        if ai_response.get("add_as_task"):
+                            tasks.append({
+                                "title": ai_response.get("task_title", "Soil Correction"),
+                                "date": sowing_date_str,
+                                "category": "fertilizer",
+                                "priority": "high",
+                                "description": ai_response.get("task_description", "Apply recommended fertilizers to correct soil profile.")
+                            })
+            except Exception as e:
+                print(f"Error calling LLM for soil fixes: {e}")
 
         except Exception as e:
             print(f"Error parsing pandas plan: {e}")

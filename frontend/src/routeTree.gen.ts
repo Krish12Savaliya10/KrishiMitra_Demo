@@ -20,7 +20,6 @@ import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppExpensesRouteImport } from './routes/_app.expenses'
 import { Route as AppFarmsRouteImport } from './routes/_app.farms'
 import { Route as AppMarketRouteImport } from './routes/_app.market'
-import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppRecommendationsRouteImport } from './routes/_app.recommendations'
 import { Route as AppWeatherRouteImport } from './routes/_app.weather'
@@ -79,11 +78,6 @@ const AppMarketRoute = AppMarketRouteImport.update({
   path: '/market',
   getParentRoute: () => AppRoute,
 } as any)
-const AppNotificationsRoute = AppNotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppProfileRoute = AppProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -111,7 +105,6 @@ export interface FileRoutesByFullPath {
   '/expenses': typeof AppExpensesRoute
   '/farms': typeof AppFarmsRoute
   '/market': typeof AppMarketRoute
-  '/notifications': typeof AppNotificationsRoute
   '/profile': typeof AppProfileRoute
   '/recommendations': typeof AppRecommendationsRoute
   '/weather': typeof AppWeatherRoute
@@ -127,7 +120,6 @@ export interface FileRoutesByTo {
   '/expenses': typeof AppExpensesRoute
   '/farms': typeof AppFarmsRoute
   '/market': typeof AppMarketRoute
-  '/notifications': typeof AppNotificationsRoute
   '/profile': typeof AppProfileRoute
   '/recommendations': typeof AppRecommendationsRoute
   '/weather': typeof AppWeatherRoute
@@ -145,7 +137,6 @@ export interface FileRoutesById {
   '/_app/expenses': typeof AppExpensesRoute
   '/_app/farms': typeof AppFarmsRoute
   '/_app/market': typeof AppMarketRoute
-  '/_app/notifications': typeof AppNotificationsRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/recommendations': typeof AppRecommendationsRoute
   '/_app/weather': typeof AppWeatherRoute
@@ -163,7 +154,6 @@ export interface FileRouteTypes {
     | '/expenses'
     | '/farms'
     | '/market'
-    | '/notifications'
     | '/profile'
     | '/recommendations'
     | '/weather'
@@ -179,7 +169,6 @@ export interface FileRouteTypes {
     | '/expenses'
     | '/farms'
     | '/market'
-    | '/notifications'
     | '/profile'
     | '/recommendations'
     | '/weather'
@@ -196,7 +185,6 @@ export interface FileRouteTypes {
     | '/_app/expenses'
     | '/_app/farms'
     | '/_app/market'
-    | '/_app/notifications'
     | '/_app/profile'
     | '/_app/recommendations'
     | '/_app/weather'
@@ -288,13 +276,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppMarketRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/notifications': {
-      id: '/_app/notifications'
-      path: '/notifications'
-      fullPath: '/notifications'
-      preLoaderRoute: typeof AppNotificationsRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/profile': {
       id: '/_app/profile'
       path: '/profile'
@@ -327,7 +308,6 @@ interface AppRouteChildren {
   AppExpensesRoute: typeof AppExpensesRoute
   AppFarmsRoute: typeof AppFarmsRoute
   AppMarketRoute: typeof AppMarketRoute
-  AppNotificationsRoute: typeof AppNotificationsRoute
   AppProfileRoute: typeof AppProfileRoute
   AppRecommendationsRoute: typeof AppRecommendationsRoute
   AppWeatherRoute: typeof AppWeatherRoute
@@ -341,7 +321,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppExpensesRoute: AppExpensesRoute,
   AppFarmsRoute: AppFarmsRoute,
   AppMarketRoute: AppMarketRoute,
-  AppNotificationsRoute: AppNotificationsRoute,
   AppProfileRoute: AppProfileRoute,
   AppRecommendationsRoute: AppRecommendationsRoute,
   AppWeatherRoute: AppWeatherRoute,

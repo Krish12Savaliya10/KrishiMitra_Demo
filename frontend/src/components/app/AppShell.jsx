@@ -1,6 +1,6 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { ChatWidget } from "./ChatWidget";
+
 import {
   LayoutDashboard,
   User,
@@ -44,13 +44,11 @@ const nav = [
   { label: "AI Mitra", to: "/ai-saathi", icon: MessageSquareText, badge: null, highlight: true },
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
   { label: "Farms", to: "/farms", icon: MapPinned },
-  { label: "Recommendations", to: "/recommendations", icon: Sprout },
-  { label: "Crop Plan", to: "/crop-plan", icon: RouteIcon },
+  { label: "Crop Plan", to: "/crop-plan", icon: CalendarCheck },
   { label: "Weather & Advisory", to: "/weather", icon: CloudSun },
   { label: "Market Prices", to: "/market", icon: LineChart },
   { label: "Risk Alerts", to: "/alerts", icon: ShieldAlert, dynamicBadge: "alerts" },
   { label: "Expenses", to: "/expenses", icon: Wallet },
-  { label: "Notifications", to: "/notifications", icon: Bell, dynamicBadge: "notifications" },
 ];
 
 const secondaryNav = [
@@ -125,10 +123,6 @@ function SidebarContent({ onNavigate }) {
         {(() => {
           let badgeVal = null;
           if (item.dynamicBadge === "alerts" && alerts.length > 0) badgeVal = alerts.length;
-          if (item.dynamicBadge === "notifications") {
-            const unread = notifications.filter(n => !n.isRead).length;
-            if (unread > 0) badgeVal = unread;
-          }
           if (item.badge) badgeVal = item.badge; // fallback for static
           
           if (!badgeVal) return null;
@@ -186,7 +180,7 @@ function SidebarContent({ onNavigate }) {
 export function AppShell({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
-  const [chatOpen, setChatOpen] = useState(false);
+
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { userProfile, activeFarm, alerts = [] } = useAppData();
   const current =
@@ -285,16 +279,7 @@ export function AppShell({ children }) {
         <main className="min-w-0 flex-1 px-4 py-6 lg:px-7">{children}</main>
       </div>
 
-      {/* Floating Chat Button */}
-      <button
-        onClick={() => setChatOpen(true)}
-        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl transition-transform hover:scale-110"
-      >
-        <MessageSquareText className="h-6 w-6" />
-      </button>
 
-      {/* Chat Widget */}
-      <ChatWidget isOpen={chatOpen} onClose={() => setChatOpen(false)} />
     </div>
   );
 }

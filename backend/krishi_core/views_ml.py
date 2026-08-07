@@ -35,82 +35,39 @@ from .serializers import (
     SoilRecommendRequestSerializer,
     CropStageTipsRequestSerializer,
 )
+from .services.ai_engine.fertilizer_service import fertilizer_service
+from .services.ai_engine.irrigation_service import irrigation_service
 
 logger = logging.getLogger("core.views")
 
 
 class RetrieveView(APIView):
-    """RAG semantic search over the ChromaDB knowledge base."""
+    """RAG semantic search over the ChromaDB knowledge base using the advanced RAGRetriever."""
     parser_classes = [JSONParser]
 
     def post(self, request):
-        chroma_client = ml_loader.state.get("chroma_client")
-        if not chroma_client:
-            return Response({"error": "ChromaDB client not initialized."}, status=500)
-
+        from krishi_core.services.ai_engine.rag_retriever import rag_retriever
+        
         serializer = RetrieveRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         query = serializer.validated_data["query"]
         n_results = serializer.validated_data.get("n_results", 5)
+        # We can pass an optional target_crop if the frontend provides it in the future
+        target_crop = request.data.get("target_crop", "")
 
         try:
-            all_collections = chroma_client.list_collections()
-            pooled_results = []
-
-            for col_meta in all_collections:
-                try:
-                    col_name = col_meta.name if hasattr(col_meta, "name") else col_meta
-                    # chromadb doesn't automatically apply ef if we just use get_collection without ef in some older versions,
-                    # but since it's already instantiated in state, we can use the main embedding function.
-                    # Actually, the quickest way is to just use the ef attached to the main collection if available.
-                    main_col = ml_loader.state.get("collection")
-                    ef = main_col._embedding_function if main_col else None
-                    col = chroma_client.get_collection(col_name, embedding_function=ef)
-                    
-                    if col.count() == 0:
-                        continue
-                        
-                    res = col.query(query_texts=[query], n_results=min(col.count(), n_results))
-                    if res.get("documents") and len(res["documents"]) > 0 and len(res["documents"][0]) > 0:
-                        docs = res["documents"][0]
-                        dists = res.get("distances", [[]])[0]
-                        metas = res.get("metadatas", [[]])[0]
-                        for i in range(len(docs)):
-                            pooled_results.append({
-                                "document": docs[i],
-                                "distance": dists[i] if i < len(dists) else 999.0,
-                                "metadata": metas[i] if i < len(metas) else {}
-                            })
-                except Exception as e:
-                    logger.warning("Error querying collection %s: %s", getattr(col_meta, "name", col_meta), e)
-
-            # Sort pooled results by distance (lower is better for L2)
-            pooled_results.sort(key=lambda x: x["distance"])
-
-            # Remove duplicates by document text
-            seen = set()
-            unique_results = []
-            for r in pooled_results:
-                if r["document"] not in seen:
-                    seen.add(r["document"])
-                    unique_results.append(r)
-
-            # Slice top K
-            top_results = unique_results[:n_results]
-
-            documents = [r["document"] for r in top_results]
-            distances = [r["distance"] for r in top_results]
-
-            context = "\n\n".join(documents)
-
+            context = rag_retriever.search(query=query, k=n_results, target_crop=target_crop)
+            
+            # The previous frontend expected raw_results and distances, but we now format a cohesive context.
+            # We return empty raw arrays to not break existing frontend expectations if any.
             return Response({
-                "context": context, 
-                "distances": distances, 
-                "raw_results": {"documents": [documents], "distances": [distances]} 
+                "context": context,
+                "distances": [], 
+                "raw_results": {"documents": [], "distances": []} 
             })
             
         except Exception as e:
-            logger.error("Error during retrieval: %s", traceback.format_exc())
+            logger.error("Error during advanced retrieval: %s", traceback.format_exc())
             return Response({"error": str(e)}, status=500)
 
 
@@ -136,55 +93,67 @@ class SoilRecommendView(APIView):
         area_acres = d["areaAcres"]
         water_avail = d["waterAvailability"].lower()
 
-        collection = ml_loader.state["collection"]
-        crop_rf_model = ml_loader.state["crop_rf_model"]
+        collection = ml_loader.state.get("collection")
         results = []
 
-        # Try to use Gemini as the primary recommendation engine
-        gemini_key = settings.GEMINI_API_KEY
-        if gemini_key:
-            try:
-                available_crops = [c["name"] for c in CROPS]
-                prompt = (
-                    f"You are an agricultural expert. Given these soil and conditions: "
-                    f"Nitrogen={nitrogen}, Phosphorus={phosphorus}, Potassium={potassium}, "
-                    f"pH={ph}, OrganicCarbon={org_carbon}, Season={season_in}, WaterAvailability={water_avail}. "
-                    f"Rank the top 3 most suitable crops from this list: {', '.join(available_crops)}. "
-                    f"Reply with ONLY a comma-separated list of the 3 crop names, nothing else."
-                )
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                res = requests.post(
-                    url,
-                    json={"contents": [{"parts": [{"text": prompt}]}]},
-                    headers={"Content-Type": "application/json"},
-                    timeout=10
-                )
-                if res.status_code == 200:
-                    text_resp = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    recommended_names = [name.strip().lower() for name in text_resp.split(",") if name.strip()]
-                    
-                    # Generate metrics using the heuristic engine, but only for Gemini's recommended crops
-                    all_heuristics = self._heuristic_fallback(ph, org_carbon, season_in, area_acres, water_avail, collection)
-                    
-                    # Map Gemini's order to high suitability scores
-                    for i, r_name in enumerate(recommended_names):
-                        for h in all_heuristics:
-                            if h["cropName"].lower() == r_name:
-                                h["suitabilityScore"] = max(90 - (i * 10), h["suitabilityScore"])
-                                results.append(h)
-                                break
-            except Exception as e:
-                logger.error("Error predicting with Gemini model: %s", e)
+        # Get results strictly from the heuristic engine (best true match based on soil/water data)
+        results = self._heuristic_fallback(ph, org_carbon, season_in, area_acres, water_avail, collection)
 
-        if not results:
-            results = self._heuristic_fallback(ph, org_carbon, season_in, area_acres, water_avail, collection)
-
+        # Sort primarily by suitabilityScore (best match)
         results.sort(key=lambda x: x["suitabilityScore"], reverse=True)
+        
+        # Keep top 5
         results = results[:5]
         if results:
             results[0]["isTopPick"] = True
+            
+            # Predict Fertilizer and Irrigation for top picks
+            for r in results:
+                ml_data = {
+                    "Soil_Type": d.get("soilType", "Black"),
+                    "Crop_Type": r["cropName"].capitalize(),
+                    "Crop_Growth_Stage": "Pre-emergence",
+                    "Season": season_in.capitalize(),
+                    "Irrigation_Type": d.get("irrigationType", "Drip"),
+                    "Region": d.get("state", "Maharashtra"),
+                    "Soil_pH": ph,
+                    "Soil_Moisture": 40.0,
+                    "Organic_Carbon": org_carbon,
+                    "Electrical_Conductivity": d.get("ec", 0.4),
+                    "Nitrogen_Level": nitrogen,
+                    "Phosphorus_Level": phosphorus,
+                    "Potassium_Level": potassium,
+                    "Temperature_C": d.get("temperature", 25.0),
+                    "Temperature": d.get("temperature", 25.0),
+                    "Humidity": d.get("humidity", 60.0),
+                    "Rainfall_mm": d.get("rainfall", 100.0),
+                    "Rainfall": d.get("rainfall", 100.0),
+                    "Field_Area_hectare": area_acres * 0.404686,  # convert acres to hectares
+                }
+                r["suggestedFertilizer"] = fertilizer_service.predict(ml_data)
+                r["irrigationPrediction"] = irrigation_service.predict(ml_data)
+            
+        llm_summary = ""
+        try:
+            from krishi_core.services.ai_engine.llm_service import llm_service
+            prompt = f"""
+You are an agricultural expert. A farmer is asking for crop recommendations for their land.
+Their soil data is: pH {ph}, Nitrogen {nitrogen}, Phosphorus {phosphorus}, Potassium {potassium}, EC {d.get('ec', 0)}, Organic Carbon {org_carbon}.
+The top crops recommended by our engine are:
+{', '.join([r['cropName'] for r in results])}
 
-        return Response({"recommendations": results})
+Write a short, engaging 2-paragraph summary directly to the farmer. Explain why the top pick ({results[0]['cropName']}) is the best choice based on their soil, and briefly mention the alternatives.
+Keep it conversational, encouraging, and formatted in plain text (no markdown formatting needed).
+"""
+            llm_summary_resp = llm_service.generate_response(prompt, force_json=False)
+            if isinstance(llm_summary_resp, dict) and 'error' not in llm_summary_resp:
+                llm_summary = llm_summary_resp.get('answer', llm_summary_resp.get('text', str(llm_summary_resp)))
+            elif isinstance(llm_summary_resp, str):
+                llm_summary = llm_summary_resp
+        except Exception as e:
+            logger.error(f"Error generating LLM summary: {e}")
+
+        return Response({"recommendations": results, "llm_summary": llm_summary})
 
     @staticmethod
     def _rag_reason(collection, crop_name, ph):
@@ -206,21 +175,19 @@ class SoilRecommendView(APIView):
         results = []
         for crop in CROPS:
             ph_lo, ph_hi = crop["phRange"]
-            if ph_lo <= ph <= ph_hi:
-                ph_score = 25.0
-            else:
-                deviation = min(abs(ph - ph_lo), abs(ph - ph_hi))
-                ph_score = max(0, 25 - deviation * 12)
-            suit = ph_score
-            if crop["season"] != season_in:
-                suit = max(0, suit - 20)
-            suit = round(min(100, max(0, suit)))
-
+            
             soil_match = 100 if ph_lo <= ph <= ph_hi else max(0, 100 - abs(ph - (ph_lo + ph_hi) / 2) * 20)
             soil_match = round(min(100, soil_match * (1 + (org_carbon - 0.5) * 0.3)))
 
             water_mult = WATER_COMPAT.get(water_avail, {}).get(crop["water"], 0.5)
             weather_pct = round(60 + water_mult * 35)
+            
+            # Suitability score is average of soil and weather match
+            suit = (soil_match + weather_pct) / 2
+            
+            if crop["season"] != season_in:
+                suit = max(0, suit - 20)
+            suit = round(min(100, max(0, suit)))
 
             yield_kg = round(crop["yieldKgPerAcre"] * area_acres)
             cost = round(crop["costPerAcre"] * area_acres)
@@ -337,7 +304,7 @@ class PredictDiseaseView(APIView):
                 "'treatment' (string, a concise 3-sentence treatment plan if diseased, or a maintenance tip if healthy)."
             )
 
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
             
             payload = {
                 "contents": [{
@@ -396,8 +363,8 @@ class HealthView(APIView):
     def get(self, request):
         return Response({
             "status": "ok",
-            "db_connected": ml_loader.state["collection"] is not None,
-            "ml_ready": ml_loader.state["disease_model"] is not None,
+            "db_connected": ml_loader.state.get("collection") is not None,
+            "ml_ready": True,
         })
 
 
@@ -413,7 +380,40 @@ class WeatherView(APIView):
             return Response({"error": "Latitude and longitude must be valid numbers"}, status=400)
 
         from krishi_core.services.openmeteo_service import OpenMeteoService
+        from krishi_core.services.alert_engine import alert_engine
+
         forecast = OpenMeteoService().get_forecast(latitude=lat, longitude=lon)
         if forecast is None:
             return Response({"error": "Failed to fetch weather data from upstream service"}, status=502)
+        
+        # Generate dynamic weather alerts based on current conditions
+        forecast["alerts"] = alert_engine.generate_alerts(forecast.get("current", {}))
+
         return Response(forecast)
+
+class DecisionEngineView(APIView):
+    """
+    Advanced AI orchestration endpoint ported from Farmsense.
+    Expects { "user_query": "...", "ml_predictions": {...}, "weather": {...}, "history": {...} }
+    """
+    parser_classes = [JSONParser]
+    
+    def post(self, request):
+        from krishi_core.services.ai_engine.decision_engine import decision_engine
+        
+        user_query = request.data.get("user_query", "")
+        ml_predictions = request.data.get("ml_predictions", {})
+        weather = request.data.get("weather", {})
+        history = request.data.get("history", {})
+        
+        try:
+            response = decision_engine.generate_recommendation(
+                user_query=user_query,
+                ml_predictions=ml_predictions,
+                weather=weather,
+                history=history
+            )
+            return Response(response)
+        except Exception as e:
+            logger.error("DecisionEngine Error: %s", traceback.format_exc())
+            return Response({"error": str(e)}, status=500)

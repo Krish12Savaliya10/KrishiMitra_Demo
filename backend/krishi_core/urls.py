@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
 from . import views_ml
+from . import views_predictions
 
 router = DefaultRouter(trailing_slash=False)
 router.register(r'users', views.UserViewSet)
@@ -52,4 +53,12 @@ urlpatterns = [
     path("disease/predict", views_ml.PredictDiseaseView.as_view()),
     path("health", views_ml.HealthView.as_view()),
     path("weather", views_ml.WeatherView.as_view()),
+
+    # Advanced AI Predictions
+    path("predict_yield", views_predictions.CropYieldPredictionView.as_view()),
+    path("recommend_fertilizer", views_predictions.FertilizerRecommendationView.as_view()),
+    path("predict_irrigation", views_predictions.IrrigationPredictionView.as_view()),
+    
+    # Decision Engine Orchestrator
+    path("ai_recommendation", views_ml.DecisionEngineView.as_view()),
 ]

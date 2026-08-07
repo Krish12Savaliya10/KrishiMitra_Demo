@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/app/AppShell";
 import { useAppData } from "@/lib/AppDataContext";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { subscribeAiSyncRefresh } from "@/lib/aiSyncEvents";
 
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_app/recommendations")({
       },
     ],
   }),
-  component: RecommendationsPage,
+  component: RecommendationsView,
 });
 
 const SOIL_TYPES = ["Black (Heavy)", "Red (Laterite)", "Sandy Loam", "Alluvial", "Clay", "Loamy", "Other"];
@@ -50,21 +50,15 @@ const FARM_SOIL_TYPE_TO_LABEL = {
   other: "Other",
 };
 
-function SoilInput({ label, id, value, onChange, placeholder, hint, step = "any" }) {
+function SoilInput({ label, id, value, placeholder, hint }) {
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
         {label}
       </label>
-      <input
-        id={id}
-        type="number"
-        step={step}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="rounded-xl border border-input bg-secondary/40 px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary/60 focus:bg-secondary/60"
-      />
+      <div className="rounded-xl border border-input bg-secondary/20 px-3 py-2.5 text-sm text-foreground/80">
+        {value || <span className="text-muted-foreground/50">{placeholder}</span>}
+      </div>
       {hint && <p className="text-[10px] text-muted-foreground/70">{hint}</p>}
     </div>
   );
@@ -78,10 +72,10 @@ function ScoreBar({ value, color = "bg-primary" }) {
   );
 }
 
-function RecommendationsPage() {
+export function RecommendationsView() {
   const { activeFarmId, activeFarm, postScoped, fetchScoped, token } = useAppData();
-  const [form, setForm]           = useState(DEFAULT_FORM);
   const [results, setResults]     = useState(null);
+  const [llmSummary, setLlmSummary] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
 
@@ -96,24 +90,11 @@ function RecommendationsPage() {
       const latest = Array.isArray(data) ? data.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] : null;
       if (latest?.cropOptions?.length) {
         setResults(latest.cropOptions);
+        setLlmSummary(latest.llmSummary || null);
       } else {
-        setResults((current) => current ?? null);
+        setResults(null);
+        setLlmSummary(null);
       }
-
-      const soilReports = await fetchScoped("/soil-reports");
-      const latestSoil = Array.isArray(soilReports) ? soilReports.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0] : null;
-      if (latestSoil) {
-        setForm(f => ({
-          ...f,
-          ph: latestSoil.ph || "",
-          nitrogen: latestSoil.nitrogen || "",
-          phosphorus: latestSoil.phosphorus || "",
-          potassium: latestSoil.potassium || "",
-          organicCarbon: latestSoil.organicCarbon || "",
-          ec: latestSoil.ec || ""
-        }));
-      }
-
     } catch (err) {
       console.error("Failed to load saved recommendations", err);
     }
@@ -132,77 +113,7 @@ function RecommendationsPage() {
     return unsubscribe;
   }, [loadSavedRecommendations]);
 
-  const set = (key) => (val) => setForm((f) => ({ ...f, [key]: val }));
 
-  const handleAnalyze = async (e) => {
-    e.preventDefault();
-    // Allow skipping strict validation if fields are not fully filled
-    // If not filled, we just use defaults for missing values so the ML engine doesn't crash
-
-    setIsLoading(true);
-    setResults(null);
-    try {
-      const month = new Date(form.startPreparationDate).getMonth() + 1;
-      const season = (month >= 6 && month <= 10) ? "kharif" : (month >= 11 || month <= 3) ? "rabi" : "zaid";
-      
-      const payload = {
-        ph:             Number(form.ph) || 6.5,
-        nitrogen:       Number(form.nitrogen) || 120,
-        phosphorus:     Number(form.phosphorus) || 20,
-        potassium:      Number(form.potassium) || 200,
-        organicCarbon:  Number(form.organicCarbon) || 0.5,
-        ec:             Number(form.ec) || 0.4,
-        soilType:       FARM_SOIL_TYPE_TO_LABEL[activeFarm?.soilType] || "Black (Heavy)",
-        season:         season,
-        areaAcres:      Number(activeFarm?.areaAcres) || 1,
-        waterAvailability: activeFarm?.waterLevel || "medium",
-        startPreparationDate: form.startPreparationDate,
-      };
-
-      const res = await fetch(`${API_URL}/soil_recommend`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("ML server error");
-      const data = await res.json();
-      setResults(data.recommendations || []);
-      toast.success("Analysis complete — view your recommendations below");
-    } catch (err) {
-      toast.error("Could not reach backend server. Make sure it is running on port 5001.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!results || !activeFarmId) return toast.error("Select a farm first");
-    setSaveLoading(true);
-    try {
-      await postScoped("/recommendations", {
-        farm:        activeFarmId,
-        season:      payload.season === "kharif" ? "Kharif 2026" : "Rabi 2026",
-        startPreparationDate: form.startPreparationDate,
-        cropOptions: results.map((r) => ({
-          cropName:         r.cropName,
-          suitabilityScore: r.suitabilityScore,
-          weatherMatchPct:  r.weatherMatchPct,
-          soilMatchPct:     r.soilMatchPct,
-          expectedYieldKg:  r.expectedYieldKg,
-          durationDays:     r.durationDays,
-          expectedMarginRs: r.expectedMarginRs,
-          isTopPick:        r.isTopPick,
-          reason:           r.reason,
-        })),
-      });
-      await loadSavedRecommendations();
-      toast.success("Recommendations saved to your farm profile");
-    } catch (err) {
-      toast.error("Failed to save recommendations");
-    } finally {
-      setSaveLoading(false);
-    }
-  };
 
   const primary = results?.find((r) => r.isTopPick) || results?.[0];
   const others  = results?.filter((r) => !r.isTopPick) || [];
@@ -211,89 +122,28 @@ function RecommendationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Crop Recommendations"
-        subtitle={`Enter your soil test values — our model scores crops against your exact soil profile and farm context`}
-        action={
-          results && (
-            <button
-              onClick={handleSave}
-              disabled={saveLoading}
-              className="glass flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold transition-colors hover:border-primary/30"
-            >
-              {saveLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Leaf className="h-3.5 w-3.5 text-primary" />}
-              Save to Profile
-            </button>
-          )
-        }
+        subtitle={`Below are the latest AI-generated crop recommendations saved for your active farm.`}
       />
 
-      {/* Soil Input Form */}
-      <form onSubmit={handleAnalyze} className="glass rounded-3xl p-6 sm:p-8">
-        <div className="mb-6 flex items-center gap-2">
-          <FlaskConical className="h-5 w-5 text-primary" />
-          <h2 className="font-display text-base font-semibold">Soil Test Report</h2>
-          <span className="ml-auto hidden text-[11px] text-muted-foreground sm:block">Values from your soil test lab report</span>
-        </div>
-
-        {/* NPK + pH */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SoilInput label="pH" id="ph" value={form.ph} onChange={set("ph")} placeholder="6.5 – 8.5" hint="Ideal: 6.5–7.5" step="0.1" />
-          <SoilInput label="Nitrogen (kg/ha)" id="n" value={form.nitrogen} onChange={set("nitrogen")} placeholder="e.g. 212" hint="Low < 180 · High > 280" />
-          <SoilInput label="Phosphorus (kg/ha)" id="p" value={form.phosphorus} onChange={set("phosphorus")} placeholder="e.g. 18" hint="Low < 10 · High > 25" />
-          <SoilInput label="Potassium (kg/ha)" id="k" value={form.potassium} onChange={set("potassium")} placeholder="e.g. 284" hint="Low < 150 · High > 300" />
-        </div>
-
-        {/* Start Date + Secondary */}
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SoilInput label="Organic Carbon (%)" id="oc" value={form.organicCarbon} onChange={set("organicCarbon")} placeholder="e.g. 0.58" hint="Ideal ≥ 0.75%" step="0.01" />
-          <SoilInput label="EC (dS/m)" id="ec" value={form.ec} onChange={set("ec")} placeholder="e.g. 0.42" hint="Safe < 1.0 dS/m" step="0.01" />
-          <div className="flex flex-col gap-1 lg:col-span-2">
-            <label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Start Preparation Date</label>
-            <input
-              type="date"
-              value={form.startPreparationDate}
-              onChange={(e) => set("startPreparationDate")(e.target.value)}
-              className="rounded-xl border border-input bg-secondary/40 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary/60 focus:bg-secondary/60"
-            />
-            <p className="text-[10px] text-muted-foreground/70">When do you plan to start preparing the field?</p>
-          </div>
-        </div>
-
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-[0_0_20px_color-mix(in_srgb,var(--color-primary)_30%,transparent)] transition-all hover:scale-[1.02] disabled:opacity-60"
-          >
-            {isLoading ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Analysing soil…</>
-            ) : (
-              <><Sparkles className="h-4 w-4" /> Analyse & Recommend</>
-            )}
-          </button>
-          {results && (
-            <button
-              type="button"
-              onClick={() => { setResults(null); setForm(DEFAULT_FORM); }}
-              className="flex items-center gap-1.5 rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Reset
-            </button>
-          )}
-        </div>
-      </form>
-
-      {/* Loading state */}
-      {isLoading && (
-        <div className="glass flex items-center justify-center gap-3 rounded-3xl py-16 text-sm text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-          Scoring 9 crops against your soil profile…
-        </div>
-      )}
+      <div className="flex justify-between items-center px-2">
+        <h2 className="font-display text-lg font-semibold text-primary">Farm Suitability Analysis</h2>
+      </div>
 
       {/* Results */}
       {results && !isLoading && primary && (
         <>
           {/* Top pick hero */}
+          {llmSummary && (
+            <div className="glass rounded-3xl p-6 sm:p-8 bg-primary/5 border border-primary/20 mb-6">
+              <div className="flex items-center gap-2 mb-3 text-primary">
+                <Sparkles className="h-5 w-5" />
+                <h3 className="font-semibold">AI Agronomist Summary</h3>
+              </div>
+              <div className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                {llmSummary}
+              </div>
+            </div>
+          )}
           <section className="glass-strong hero-ambient relative overflow-hidden rounded-3xl p-6 sm:p-8">
             <div className="grid-pattern pointer-events-none absolute inset-0" />
             <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-start">
@@ -326,6 +176,24 @@ function RecommendationsPage() {
                     <div className="text-lg font-bold">{primary.durationDays} days</div>
                   </div>
                 </div>
+
+                {/* Machine Learning Insights (Fertilizer and Irrigation) */}
+                {(primary.suggestedFertilizer || primary.irrigationPrediction) && (
+                  <div className="mt-6 flex flex-wrap gap-4 pt-4 border-t border-border/40">
+                    {primary.suggestedFertilizer && (
+                      <div className="rounded-xl border border-border/50 bg-secondary/20 p-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1"><Sprout className="h-3 w-3"/> Suggested Fertilizer</div>
+                        <div className="text-sm font-semibold">{primary.suggestedFertilizer}</div>
+                      </div>
+                    )}
+                    {primary.irrigationPrediction && (
+                      <div className="rounded-xl border border-border/50 bg-secondary/20 p-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1"><Droplets className="h-3 w-3"/> AI Irrigation Pattern</div>
+                        <div className="text-sm font-semibold">{primary.irrigationPrediction}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Score bars */}
@@ -404,6 +272,23 @@ function RecommendationsPage() {
                     </div>
 
                     <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground line-clamp-2">{crop.reason}</p>
+
+                    {(crop.suggestedFertilizer || crop.irrigationPrediction) && (
+                      <div className="mb-3 space-y-2 border-t border-border/50 pt-3">
+                        {crop.suggestedFertilizer && (
+                          <div className="text-[10px] text-muted-foreground flex items-center justify-between">
+                            <span className="flex items-center gap-1 font-semibold"><Sprout className="h-3 w-3"/> Fertilizer</span>
+                            <span className="font-semibold text-foreground truncate pl-2 max-w-[120px] text-right" title={crop.suggestedFertilizer}>{crop.suggestedFertilizer}</span>
+                          </div>
+                        )}
+                        {crop.irrigationPrediction && (
+                          <div className="text-[10px] text-muted-foreground flex items-center justify-between">
+                            <span className="flex items-center gap-1 font-semibold"><Droplets className="h-3 w-3"/> Irrigation</span>
+                            <span className="font-semibold text-foreground truncate pl-2 max-w-[120px] text-right" title={crop.irrigationPrediction}>{crop.irrigationPrediction}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between border-t border-border/50 pb-3 pt-3 text-xs font-semibold">
                       <div>{crop.expectedYieldKg.toLocaleString("en-IN")} kg</div>

@@ -58,3 +58,4 @@ logs/
 .cache/
 .temp/
 .tmp/
+*.pkl

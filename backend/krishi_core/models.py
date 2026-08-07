@@ -63,6 +63,12 @@ class Farm(models.Model):
         ],
         default="other"
     )
+    ph = models.FloatField(null=True, blank=True)
+    nitrogen = models.FloatField(null=True, blank=True)
+    phosphorus = models.FloatField(null=True, blank=True)
+    potassium = models.FloatField(null=True, blank=True)
+    ec = models.FloatField(null=True, blank=True)
+    organicCarbon = models.FloatField(null=True, blank=True)
     waterResources = models.JSONField(default=list, blank=True) # Array of strings
     waterLevel = models.CharField(
         max_length=20,
@@ -72,6 +78,7 @@ class Farm(models.Model):
     currentCrop = models.CharField(max_length=100, blank=True, default="")
     cropHealthIndex = models.IntegerField(default=0)
     location = models.JSONField(default=dict, blank=True)
+    riskRadarData = models.JSONField(default=dict, blank=True)
     isActive = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

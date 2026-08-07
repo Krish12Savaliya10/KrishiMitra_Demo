@@ -103,6 +103,9 @@ class SoilRecommendRequestSerializer(serializers.Serializer):
     humidity = serializers.FloatField(required=False, default=60.0)
     rainfall = serializers.FloatField(required=False, default=100.0)
     state = serializers.CharField(required=False, default="Maharashtra")
+    soilType = serializers.CharField(required=False, default="Black")
+    startPreparationDate = serializers.CharField(required=False, default="")
+    irrigationType = serializers.CharField(required=False, default="Drip")
 
 
 class CropStageTipsRequestSerializer(serializers.Serializer):

@@ -142,7 +142,6 @@ export function AppDataProvider({ children }) {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) {
-      logout();
       return [];
     }
     return res.json();
@@ -161,7 +160,6 @@ export function AppDataProvider({ children }) {
       body: JSON.stringify({ ...body, farm: activeFarmId }),
     });
     if (res.status === 401) {
-      logout();
       return { error: "Unauthorized" };
     }
     return res.json();
@@ -179,7 +177,6 @@ export function AppDataProvider({ children }) {
       body: JSON.stringify(body),
     });
     if (res.status === 401) {
-      logout();
       return { error: "Unauthorized" };
     }
     return res.json();

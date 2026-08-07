@@ -56,6 +56,38 @@ function Dashboard() {
       (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api");
     const locationKey = activeFarm.location.address
       .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+    const fetchLiveWeather = async () => {
+      try {
+        const { lat, lon, address } = activeFarm.location;
+        if (lat == null || lon == null) return;
+        const res = await fetch(`${API_URL}/weather?latitude=${lat}&longitude=${lon}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const current = {
+          temp: Math.round(data.current?.temperature ?? 28),
+          humidity: data.current?.humidity ?? 65,
+          wind: Math.round(data.current?.wind_speed ?? 12),
+          uv: data.daily_forecast?.[0]?.uv_index_max ?? 5,
+          rainChance: data.daily_forecast?.[0]?.precipitation_probability_max ?? 10,
+          todayRainMm: data.current?.precipitation ?? 0,
+          condition: address,
+          cityName: address,
+          alerts: data.alerts || []
+        };
+        setWeatherSnapshot(current);
+
+        // Persist to cache
+        await fetch(`${API_URL}/weather/cache`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ locationKey, cityName: address, lat, lon, data }),
+        });
+      } catch (e) { console.error("Dashboard live weather fetch failed", e); }
+    };
+
     fetch(`${API_URL}/weather/cache/${locationKey}?query=${encodeURIComponent(activeFarm.location.address)}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -71,10 +103,14 @@ function Dashboard() {
             todayRainMm: cached.data.current.precipitation,
             condition: cached.cityName,
             cityName: cached.cityName,
+            alerts: cached.data.alerts || [],
           });
+        } else {
+          // If cache miss, fetch live
+          fetchLiveWeather();
         }
       })
-      .catch(() => {});
+      .catch(() => { fetchLiveWeather(); });
   }, [token, activeFarm, weatherSnapshot]);
 
   const totalArea = farms.reduce((s, f) => s + (f.areaAcres || 0), 0);
@@ -82,27 +118,52 @@ function Dashboard() {
   const firstName = userProfile?.name?.split(" ")[0] || "Farmer";
   const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
-  // Compute real crop plan progress
+  // Compute real crop plan progress based on dates
   const stages = cropPlan?.milestones || [];
   const doneStages = stages.filter(s => s.status === "done").length;
-  const cropProgress = stages.length > 0 ? Math.round((doneStages / stages.length) * 100) : 0;
-  const activeStage = stages.find(s => s.status === "in-progress" || s.status === "pending");
-  const cropProgressHint = activeStage ? `${activeStage.stage} · Stage ${doneStages + 1} of ${stages.length}` : (cropPlan ? `${doneStages} of ${stages.length} stages done` : "No active crop plan");
+  let cropProgress = 0;
+  let cropProgressHint = "No active crop plan";
+  
+  if (cropPlan?.sowingDate && cropPlan?.expectedHarvestDate) {
+    const todayDate = new Date();
+    const sowing = new Date(cropPlan.sowingDate);
+    const harvest = new Date(cropPlan.expectedHarvestDate);
+    
+    const durationDays = Math.max(1, Math.round((harvest - sowing) / (1000 * 60 * 60 * 24)));
+    const elapsedDays = Math.max(0, Math.round((todayDate - sowing) / (1000 * 60 * 60 * 24)));
+    
+    cropProgress = Math.min(100, Math.round((elapsedDays / durationDays) * 100));
+    
+    const activeStage = stages.find(s => s.status === "in-progress" || s.status === "pending");
+    cropProgressHint = activeStage ? `${activeStage.stage} · Day ${elapsedDays} of ${durationDays}` : `Day ${elapsedDays} of ${durationDays}`;
+  } else if (stages.length > 0) {
+    cropProgress = Math.round((doneStages / stages.length) * 100);
+    const activeStage = stages.find(s => s.status === "in-progress" || s.status === "pending");
+    cropProgressHint = activeStage ? `${activeStage.stage} · Stage ${doneStages + 1} of ${stages.length}` : `${doneStages} of ${stages.length} stages done`;
+  }
 
 
-  // Build dynamic AI advisory highlights from real data (rule-based, no ML)
   const rainChance = weatherSnapshot?.rainChance || 0;
   const humidity = weatherSnapshot?.humidity || 0;
-  const aiAdvisories = [
+
+  // Fallback to static rules if the backend didn't generate any AI alerts
+  const staticAdvisories = [
     rainChance > 60
       ? { title: "Rain alert: delay spraying", body: `Rain probability is ${rainChance}%. Avoid spraying operations until dry weather returns to ensure full crop absorption.`, tone: "text-warning" }
       : { title: "Good spraying window ahead", body: `Rain chance is only ${rainChance}%. This is a good window for micronutrient or pesticide spraying operations.`, tone: "text-primary" },
     humidity > 80
       ? { title: "High humidity risk", body: `Humidity at ${humidity}% — ideal conditions for fungal disease. Inspect leaves and consider preventive fungicide application.`, tone: "text-warning" }
       : { title: "Irrigation efficiency tip", body: activeFarm ? `Your ${activeFarm.name} farm: schedule irrigation in early morning to reduce evaporation losses by up to 30%.` : "Schedule irrigation in early morning to reduce evaporation losses by up to 30%.", tone: "text-cyan" },
-
     { title: "Market timing signal", body: "Check the Market Prices page for today's Mandi rates and compare with your expected harvest value to plan selling strategy.", tone: "text-primary" },
   ];
+
+  const dynamicAlerts = weatherSnapshot?.alerts?.map(alert => ({
+    title: alert.type === "critical" ? "Critical Weather Alert" : "Weather Advisory",
+    body: alert.message,
+    tone: alert.type === "critical" ? "text-destructive" : (alert.type === "warning" ? "text-warning" : "text-cyan")
+  })) || [];
+
+  const aiAdvisories = dynamicAlerts.length > 0 ? dynamicAlerts : staticAdvisories;
 
   return (
     <div className="space-y-5">
@@ -184,16 +245,13 @@ function Dashboard() {
         <section className="glass rounded-2xl p-5 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-display text-sm font-semibold">Quick actions</h2>
-            <Link to="/crop-plan" className="text-xs font-medium text-primary hover:underline">
-              Open crop plan
-            </Link>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {[
               { to: "/expenses", label: "💰 Expense Tracker", sub: "Log farm expenses" },
               { to: "/market", label: "📈 Market Prices", sub: "Check today's mandi rates" },
               { to: "/farms", label: "🏡 Farm Details", sub: "Manage your farm plots" },
-              { to: "/crop-plan", label: "📅 Crop Plan", sub: "View growth stage roadmap" },
+              { to: "/weather", label: "🌤️ Weather", sub: "Check weekly forecast" },
             ].map(({ to, label, sub }) => (
               <Link
                 key={to}

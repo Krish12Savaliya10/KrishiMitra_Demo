@@ -374,15 +374,15 @@ function MarketPage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="glass rounded-2xl p-4">
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Avg Modal Price</div>
-                <div className="mt-1 font-display text-2xl font-bold text-primary">₹{cropStats.avg.toLocaleString()}</div>
+                <div className="mt-1 font-display text-2xl font-bold text-primary">₹{cropStats.avg.toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">/ Quintal</span></div>
               </div>
               <div className="glass rounded-2xl p-4">
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Highest</div>
-                <div className="mt-1 font-display text-2xl font-bold">₹{cropStats.high.toLocaleString()}</div>
+                <div className="mt-1 font-display text-2xl font-bold">₹{cropStats.high.toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">/ Quintal</span></div>
               </div>
               <div className="glass rounded-2xl p-4">
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Lowest</div>
-                <div className="mt-1 font-display text-2xl font-bold">₹{cropStats.low.toLocaleString()}</div>
+                <div className="mt-1 font-display text-2xl font-bold">₹{cropStats.low.toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">/ Quintal</span></div>
               </div>
               <div className="glass rounded-2xl p-4">
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -534,10 +534,10 @@ function MarketPage() {
                           </td>
                         )}
                         <td className="py-3 px-2 text-right font-display font-bold text-primary">
-                          ₹{p.modal_price.toLocaleString()}
+                          ₹{p.modal_price.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">/ Qtl</span>
                         </td>
                         <td className="py-3 px-2 text-right text-xs text-muted-foreground">
-                          ₹{p.min_price} - ₹{p.max_price}
+                          ₹{p.min_price} - ₹{p.max_price} <span className="text-[9px]">/ Qtl</span>
                         </td>
                         <td className="py-3 px-2 text-right text-[11px] text-muted-foreground">
                           {p.arrival_date}

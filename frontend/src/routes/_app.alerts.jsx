@@ -43,12 +43,12 @@ const config = {
   },
 };
 
-const riskCategories = [
-  { icon: CloudRain, label: "Weather risk", level: "Elevated", pct: 72, tone: "warning" },
-  { icon: Timer, label: "Schedule delay risk", level: "Moderate", pct: 45, tone: "cyan" },
-  { icon: Sprout, label: "Crop health risk", level: "Low", pct: 18, tone: "primary" },
-  { icon: BellRing, label: "Equipment risk", level: "Moderate", pct: 40, tone: "cyan" },
-];
+const DEFAULT_RADAR = {
+  "Weather risk": { level: "Low", pct: 0, tone: "primary" },
+  "Schedule delay risk": { level: "Low", pct: 0, tone: "primary" },
+  "Crop health risk": { level: "Low", pct: 0, tone: "primary" },
+  "Equipment risk": { level: "Low", pct: 0, tone: "primary" },
+};
 
 
 
@@ -59,6 +59,17 @@ function AlertsPage() {
   const visibleAlerts = alerts.filter((a) => !dismissed.includes(a._id) && a.status !== "dismissed");
   const criticalCount = visibleAlerts.filter((a) => a.severity === "critical").length;
   const warningCount = visibleAlerts.filter((a) => a.severity === "warning").length;
+
+  const radarData = activeFarm?.riskRadarData && Object.keys(activeFarm.riskRadarData).length > 0 
+    ? activeFarm.riskRadarData 
+    : DEFAULT_RADAR;
+
+  const riskCategories = [
+    { icon: CloudRain, label: "Weather risk", ...radarData["Weather risk"] },
+    { icon: Timer, label: "Schedule delay risk", ...radarData["Schedule delay risk"] },
+    { icon: Sprout, label: "Crop health risk", ...radarData["Crop health risk"] },
+    { icon: BellRing, label: "Equipment risk", ...radarData["Equipment risk"] },
+  ];
 
   // Persist dismissal as status: "dismissed" so it survives a refresh instead
   // of quietly reappearing once local state resets.

@@ -94,19 +94,24 @@ function WeatherIcon({ rainChance, size = 5, className = "" }) {  const cls = `h
 }
 
 // --- Fetch weather for a given location string ---
-async function fetchWeatherForLocation(locationQuery) {
-  let lat = 21.17; let lon = 72.83; // Default Surat
+async function fetchWeatherForLocation(locationQuery, inputLat, inputLon) {
+  let lat = inputLat;
+  let lon = inputLon;
   let cityName = locationQuery;
 
-  const geoRes = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationQuery)}&limit=1`
-  );
-  const geoData = await geoRes.json();
-  if (geoData && geoData.length > 0) {
-    lat = parseFloat(geoData[0].lat);
-    lon = parseFloat(geoData[0].lon);
-    const addr = geoData[0].address || {};
-    cityName = addr.city || addr.town || addr.village || addr.county || locationQuery;
+  if (lat == null || lon == null) {
+    const geoRes = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationQuery)}&limit=1`
+    );
+    const geoData = await geoRes.json();
+    if (geoData && geoData.length > 0) {
+      lat = parseFloat(geoData[0].lat);
+      lon = parseFloat(geoData[0].lon);
+      const addr = geoData[0].address || {};
+      cityName = addr.city || addr.town || addr.village || addr.county || locationQuery;
+    } else {
+      throw new Error(`Could not find coordinates for ${locationQuery}`);
+    }
   }
 
   const baseUrl = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api");
@@ -159,7 +164,9 @@ async function fetchWeatherForLocation(locationQuery) {
       };
     });
 
-  return { cityName, current, daily, hourly, lat, lon };
+  const alerts = data.alerts || [];
+
+  return { cityName, current, daily, hourly, lat, lon, alerts };
 }
 
 // --- Location chip, styled to match the rest of the app (glass cards, theme tokens) ---
@@ -265,7 +272,7 @@ function WeatherPage() {
 
     // --- Phase 2: Live fetch (background if cache was shown, foreground if empty) ---
     try {
-      const liveData = await fetchWeatherForLocation(loc.query);
+      const liveData = await fetchWeatherForLocation(loc.query, loc.lat, loc.lon);
       setLocationData(prev => ({ ...prev, [loc.id]: liveData }));
       setLocationMeta(prev => ({ ...prev, [loc.id]: { source: "live", ageMinutes: 0, cachedAt: new Date().toISOString() } }));
       // Persist to backend cache for next visit
@@ -273,6 +280,7 @@ function WeatherPage() {
         current: liveData.current,
         daily: liveData.daily,
         hourly: liveData.hourly,
+        alerts: liveData.alerts,
       });
     } catch (e) { console.error("Live weather fetch failed for", loc.query, e); }
   };
@@ -292,7 +300,7 @@ function WeatherPage() {
       const id = "user-home";
       setLocations(prev => {
         if (prev.find(l => l.id === id)) return prev;
-        return [{ id, query: userLocation.query }, ...prev];
+        return [{ id, query: userLocation.query, lat: userLocation.lat, lon: userLocation.lon }, ...prev];
       });
       setActiveId(id);
     } else if (activeFarm?.location?.address) {
@@ -301,7 +309,7 @@ function WeatherPage() {
       const id = "farm-main";
       setLocations(prev => {
         if (prev.find(l => l.id === id)) return prev;
-        return [{ id, query: farmQuery }, ...prev];
+        return [{ id, query: farmQuery, lat: activeFarm.location.lat, lon: activeFarm.location.lon }, ...prev];
       });
       setActiveId(id);
     }
@@ -327,12 +335,15 @@ function WeatherPage() {
     const state = addr.state || "";
     const query = state ? `${name}, ${state}` : name;
     const id = Date.now();
-    setLocations(prev => [...prev, { id, query }]);
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+    
+    setLocations(prev => [...prev, { id, query, lat, lon }]);
     setActiveId(id);
     setSearchQuery("");
     setSearchResults([]);
     setShowSearch(false);
-    loadLocationSWR({ id, query });
+    loadLocationSWR({ id, query, lat, lon });
   };
 
   const removeLocation = (id) => {
