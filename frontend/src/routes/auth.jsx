@@ -4,7 +4,6 @@ import { ArrowRight, Lock, Mail, Phone, UserRound, ShieldCheck, BarChart3, MapPi
 
 import { BrandMark, ThemeToggle } from "@/components/app/AppShell";
 import { useAppData } from "@/lib/AppDataContext";
-import { GoogleOAuthProvider, GoogleLogin } from "@react-oauth/google";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -59,6 +58,10 @@ function AuthPage() {
   const [forgotPasswordOTP, setForgotPasswordOTP] = useState("");
   const [forgotPasswordNew, setForgotPasswordNew] = useState("");
   const [forgotError, setForgotError] = useState("");
+
+  const [otpLoginStep, setOtpLoginStep] = useState("email");
+  const [otpLoginEmail, setOtpLoginEmail] = useState("");
+  const [otpLoginCode, setOtpLoginCode] = useState("");
 
   const [isLocating, setIsLocating] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -219,23 +222,44 @@ function AuthPage() {
     }
   };
 
-  const handleGoogleSuccess = async (credentialResponse) => {
+  const handleOtpLoginRequest = async () => {
     setApiError("");
-    const API_URL =
-      import.meta.env.VITE_API_URL ||
-      (typeof window !== "undefined"
-        ? `http://${window.location.hostname}:5001/api`
-        : "http://localhost:5001/api");
+    if (!otpLoginEmail) {
+      setApiError("Email is required");
+      return;
+    }
+    const API_URL = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api");
     try {
-      const res = await fetch(`${API_URL}/auth/google`, {
+      const res = await fetch(`${API_URL}/auth/otp/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential: credentialResponse.credential }),
+        body: JSON.stringify({ email: otpLoginEmail }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Google login failed");
+      if (!res.ok) throw new Error(data.message || "Failed to send OTP");
+      setOtpLoginStep("verify");
+    } catch (err) {
+      setApiError(err.message);
+    }
+  };
+
+  const handleOtpLoginVerify = async () => {
+    setApiError("");
+    if (!otpLoginCode) {
+      setApiError("OTP is required");
+      return;
+    }
+    const API_URL = import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:5001/api` : "http://localhost:5001/api");
+    try {
+      const res = await fetch(`${API_URL}/auth/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: otpLoginEmail, otp: otpLoginCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Invalid OTP");
       login(data.token);
-      navigate({ to: "/dashboard" });
+      navigate({ to: "/farms" });
     } catch (err) {
       setApiError(err.message);
     }
@@ -385,6 +409,49 @@ function AuthPage() {
       );
     }
 
+    if (mode === "otp-login") {
+      return (
+        <div className="space-y-4">
+          {otpLoginStep === "email" ? (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-foreground">Email address</label>
+                <input
+                  type="email"
+                  value={otpLoginEmail}
+                  onChange={(e) => { setOtpLoginEmail(e.target.value); setApiError(""); }}
+                  placeholder="you@example.com"
+                  className="w-full rounded-xl border border-input bg-background/50 px-3.5 py-3 text-sm text-foreground outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div className="mt-4 flex gap-3">
+                <button type="button" onClick={() => setMode("login")} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium hover:bg-secondary/20">Back</button>
+                <button type="button" onClick={handleOtpLoginRequest} className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground hover:opacity-90">Send OTP</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-foreground">Enter 6-Digit OTP</label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={otpLoginCode}
+                  onChange={(e) => { setOtpLoginCode(e.target.value); setApiError(""); }}
+                  placeholder="123456"
+                  className="w-full rounded-xl border border-input bg-background/50 px-3.5 py-3 text-sm text-foreground outline-none tracking-widest focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div className="mt-4 flex gap-3">
+                <button type="button" onClick={() => setOtpLoginStep("email")} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium hover:bg-secondary/20">Back</button>
+                <button type="button" onClick={handleOtpLoginVerify} className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground hover:opacity-90">Verify & Sign In</button>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
     if (mode === "login") {
       return (
         <>
@@ -489,10 +556,7 @@ function AuthPage() {
     }
   };
 
-  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "336826620573-mockclientid.apps.googleusercontent.com";
-
   return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <div className="grid min-h-screen bg-background lg:grid-cols-2">
       {/* Left: form */}
       <div className="hero-ambient relative flex flex-col px-5 py-6 sm:px-10 h-[100dvh] overflow-y-auto">
@@ -560,7 +624,7 @@ function AuthPage() {
                 </div>
               )}
 
-              {mode !== "forgot-password" && (
+              {mode !== "forgot-password" && mode !== "otp-login" && (
                 <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
                   {renderStep()}
                   <button
@@ -572,7 +636,7 @@ function AuthPage() {
                   </button>
                 </form>
               )}
-              {mode === "forgot-password" && (
+              {(mode === "forgot-password" || mode === "otp-login") && (
                 <div className="mt-6 space-y-4">{renderStep()}</div>
               )}
 
@@ -587,15 +651,14 @@ function AuthPage() {
                     </div>
                   </div>
                   <div className="mt-6 flex justify-center">
-                    <GoogleLogin
-                      onSuccess={handleGoogleSuccess}
-                      onError={() => setApiError("Google login failed. Please try again.")}
-                      theme="outline"
-                      size="large"
-                      text={mode === "login" ? "signin_with" : "signup_with"}
-                      shape="rectangular"
-                      width="340"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => { setMode("otp-login"); setOtpLoginStep("email"); setErrors({}); setApiError(""); }}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card py-3 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+                    >
+                      <Mail className="h-4 w-4" />
+                      Continue with OTP
+                    </button>
                   </div>
                 </>
               )}
@@ -668,7 +731,6 @@ function AuthPage() {
         </div>
       </div>
     </div>
-    </GoogleOAuthProvider>
   );
 }
 

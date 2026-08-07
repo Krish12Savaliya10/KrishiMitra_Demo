@@ -155,47 +155,104 @@ def auth_update_profile(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])
-def auth_google(request):
-    from google.oauth2 import id_token
-    from google.auth.transport import requests as google_requests
-    from django.conf import settings
+@permission_classes([permissions.IsAuthenticated])
+def auth_change_password(request):
+    """Change the logged-in user's password."""
+    user = request.user
+    old_password = request.data.get('oldPassword')
+    new_password = request.data.get('newPassword')
+
+    if not user.check_password(old_password):
+        return Response({'message': 'Incorrect current password.'}, status=400)
+
+    if not new_password or len(new_password) < 6:
+        return Response({'message': 'New password must be at least 6 characters long.'}, status=400)
+
+    user.set_password(new_password)
+    user.save()
     
-    token = request.data.get('credential')
-    if not token:
-        return Response({'message': 'No token provided'}, status=400)
-        
+    # Optional: Keep user logged in after password change by re-issuing token, or let frontend handle it
+    return Response({'message': 'Password changed successfully.'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def auth_request_otp(request):
+    from django.core.mail import send_mail
+    from django.conf import settings
+    from django.utils import timezone
+    from datetime import timedelta
+    import random
+    from .models import AuthOTP
+
+    email = request.data.get('email')
+    if not email:
+        return Response({'message': 'Email is required'}, status=400)
+
+    otp_code = str(random.randint(100000, 999999))
+    
+    AuthOTP.objects.filter(email=email).delete()
+    AuthOTP.objects.create(
+        email=email,
+        otp=otp_code,
+        expires_at=timezone.now() + timedelta(minutes=15)
+    )
+    
     try:
-        # Specify the CLIENT_ID of the app that accesses the backend:
-        idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), getattr(settings, 'GOOGLE_CLIENT_ID', ''))
+        send_mail(
+            'KrishiMitra - Login OTP',
+            f'Your login OTP is: {otp_code}. It will expire in 15 minutes.',
+            getattr(settings, 'EMAIL_HOST_USER', 'noreply@krishimitra.com'),
+            [email],
+            fail_silently=False,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger("krishi_core").error("Failed to send email: %s", e)
+        return Response({'message': 'Failed to send email. Check SMTP settings.'}, status=500)
         
-        email = idinfo['email']
-        first_name = idinfo.get('given_name', '')
-        last_name = idinfo.get('family_name', '')
-        google_id = idinfo['sub']
+    return Response({'message': 'OTP sent successfully.'})
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def auth_verify_otp(request):
+    from .models import AuthOTP
+    
+    email = request.data.get('email')
+    otp_code = request.data.get('otp')
+    
+    if not email or not otp_code:
+        return Response({'message': 'Email and OTP are required'}, status=400)
         
-        user = User.objects.filter(email=email).first()
-        if not user:
-            user = User.objects.create(
-                username=email,
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-                googleId=google_id,
-                isVerified=True,
-                phone=email # Fallback for unique constraint
-            )
-            user.set_unusable_password()
-            user.save()
-            
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'token': str(refresh.access_token),
-            'user': UserSerializer(user).data
-        })
-    except ValueError:
-        # Invalid token
-        return Response({'message': 'Invalid Google token'}, status=400)
+    otp_record = AuthOTP.objects.filter(email=email).last()
+    
+    if not otp_record or not otp_record.is_valid():
+        return Response({'message': 'OTP has expired or does not exist.'}, status=400)
+        
+    if otp_record.otp != otp_code:
+        return Response({'message': 'Invalid OTP.'}, status=400)
+        
+    otp_record.delete()
+    
+    user = User.objects.filter(email=email).first()
+    if not user:
+        # Create a new user with random string for phone to avoid unique constraint issues initially
+        import uuid
+        user = User.objects.create(
+            username=email,
+            email=email,
+            first_name="Farmer",
+            isVerified=True,
+            phone=str(uuid.uuid4())[:15]
+        )
+        user.set_unusable_password()
+        user.save()
+        
+    refresh = RefreshToken.for_user(user)
+    return Response({
+        'token': str(refresh.access_token),
+        'user': UserSerializer(user).data
+    })
 
 
 @api_view(['POST'])
@@ -236,7 +293,9 @@ def auth_forgot_password(request):
             logging.getLogger("krishi_core").error("Failed to send email: %s", e)
             return Response({'message': 'Failed to send email. Check SMTP settings.'}, status=500)
             
-    return Response({'message': 'If this email is registered, a reset OTP has been sent.'})
+        return Response({'message': 'If this email is registered, a reset OTP has been sent.'})
+    else:
+        return Response({'message': 'This email is not registered. Please create an account first.'}, status=404)
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
@@ -296,7 +355,7 @@ class CropPlanViewSet(OwnerViewSet):
         if not self.request.user or self.request.user.is_anonymous:
             qs = CropPlan.objects.none()
         else:
-            qs = super().get_queryset()
+            qs = super().get_queryset().prefetch_related('schedule_tasks')
         farm_id = self.request.query_params.get('farm')
         if farm_id:
             qs = qs.filter(farm_id=farm_id)
@@ -472,7 +531,7 @@ class ScheduleTaskViewSet(OwnerViewSet):
 
     @action(detail=False, methods=['post'], url_path='shift-today')
     def shift_today(self, request):
-        farm_id = request.headers.get('Farm-Id') or request.data.get('farm_id')
+        farm_id = request.headers.get('Farm-Id') or request.data.get('farm_id') or request.data.get('farm')
         if not farm_id:
             return Response({'error': 'Farm ID required'}, status=400)
             

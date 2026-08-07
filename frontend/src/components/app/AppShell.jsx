@@ -55,8 +55,7 @@ const nav = [
 ];
 
 const secondaryNav = [
-  { label: "Profile", to: "/profile", icon: User },
-  { label: "Settings", to: "/settings", icon: Settings },
+  { label: "Settings & Profile", to: "/profile", icon: User },
 ];
 
 export function BrandMark({ compact = false }) {

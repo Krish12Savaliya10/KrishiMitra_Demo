@@ -40,6 +40,16 @@ class PasswordResetOTP(models.Model):
         from django.utils import timezone
         return timezone.now() <= self.expires_at
 
+class AuthOTP(models.Model):
+    email = models.EmailField()
+    otp = models.CharField(max_length=6)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def is_valid(self):
+        from django.utils import timezone
+        return timezone.now() <= self.expires_at
+
 class Farm(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="farms")
     name = models.CharField(max_length=255)

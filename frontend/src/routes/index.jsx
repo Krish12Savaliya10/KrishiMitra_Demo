@@ -41,14 +41,7 @@ function Landing() {
       {/* Navbar */}
       <header className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-5xl rounded-full glass border border-foreground/10 px-6 py-3 flex items-center justify-between shadow-2xl">
         <BrandMark />
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-          <a href="#" className="hover:text-foreground transition-colors flex items-center gap-1">
-             Product <div className="h-1 w-1 rounded-full bg-primary mt-1" />
-          </a>
-          <a href="#" className="hover:text-foreground transition-colors">Solutions</a>
-          <a href="#" className="hover:text-foreground transition-colors">Pricing</a>
-          <a href="#" className="hover:text-foreground transition-colors">Resources</a>
-        </nav>
+        {/* Removed broken nav links to keep header clean and functional */}
         <div className="flex items-center gap-4">
           <ThemeToggle />
           <Link to="/auth" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Log in</Link>
@@ -74,7 +67,7 @@ function Landing() {
           
           <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary mb-8 glow-emerald">
              <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-             New: KrishiMitra 2.0 is now available <ChevronRight className="h-3 w-3" />
+             Welcome to KrishiMitra: Your Smart Farming Assistant <ChevronRight className="h-3 w-3" />
           </div>
 
           <h1 className="font-display text-5xl sm:text-7xl font-bold tracking-tight text-foreground mb-6 leading-[1.1]">
@@ -90,12 +83,7 @@ function Landing() {
             Start Free Trial <ChevronRight className="h-5 w-5" />
           </Link>
 
-          <div className="flex items-center gap-6 text-sm text-muted-foreground font-medium">
-             <span className="flex items-center gap-1.5"><Shield className="h-4 w-4 text-primary" /> No credit card</span>
-             <span className="flex items-center gap-1.5"><Shield className="h-4 w-4 text-primary" /> 14-day free trial</span>
-             <span className="flex items-center gap-1.5"><Shield className="h-4 w-4 text-primary" /> Cancel anytime</span>
-          </div>
-
+          {/* Removed trial badges per user request */}
         </div>
 
         {/* Floating Cards */}

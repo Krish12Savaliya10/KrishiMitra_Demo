@@ -132,7 +132,7 @@ function Dashboard() {
             </p>
             <div className="mt-5 flex flex-wrap gap-2.5">
               <Link
-                to="/crop-plan"
+                to="/schedule"
                 className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-[0_0_24px_-8px_var(--color-primary)] transition-transform hover:scale-[1.03]"
               >
                 View today's schedule <ArrowRight className="h-3.5 w-3.5" />
